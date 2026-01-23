@@ -1,0 +1,10 @@
+http:
+  addr: ":8080"
+
+db:
+  dsn: "postgres://callcentrix:callcentrix123@localhost:5432/postgres?sslmode=disable"
+
+
+jwt:
+  secret: "CHANGE_ME_SECRET"
+  ttl_minutes: 1440

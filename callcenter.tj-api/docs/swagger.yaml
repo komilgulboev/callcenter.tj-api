@@ -1,0 +1,94 @@
+basePath: /
+definitions:
+  auth.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  auth.LoginResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  sip.CredentialsResponse:
+    properties:
+      domain:
+        type: string
+      sipPassword:
+        type: string
+      sipUser:
+        type: string
+      wsUrl:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: CRM + VoIP backend
+  title: CallCentrix API
+  version: "1.0"
+paths:
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: invalid username or password
+          schema:
+            type: string
+        "403":
+          description: user disabled
+          schema:
+            type: string
+      summary: User login
+      tags:
+      - Auth
+  /api/sip/credentials:
+    get:
+      description: Returns SIP credentials for authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/sip.CredentialsResponse'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: sip account not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get SIP credentials
+      tags:
+      - SIP
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
