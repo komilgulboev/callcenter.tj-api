@@ -2,7 +2,7 @@ http:
   addr: ":8080"
 
 db:
-  dsn: "postgres://callcentrix:callcentrix123@localhost:5432/postgres?sslmode=disable"
+  dsn: "postgres://postgres:postgres@172.20.40.2:5432/postgres?sslmode=disable"
 
 
 jwt:

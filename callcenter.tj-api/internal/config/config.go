@@ -1,35 +1,87 @@
 package config
 
 import (
-    "os"
-    "gopkg.in/yaml.v3"
+	"log"
+	"os"
+	"strconv"
 )
 
 type Config struct {
-    HTTP struct {
-        Addr string `yaml:"addr"`
-    } `yaml:"http"`
+	HTTP HTTPConfig
+	DB   DBConfig
+	JWT  JWTConfig
+	AMI  AMIConfig
+}
 
-    JWT struct {
-        Secret     string `yaml:"secret"`
-        TTLMinutes int    `yaml:"ttl_minutes"`
-    } `yaml:"jwt"`
+type HTTPConfig struct {
+	Addr string
+}
 
-    DB struct {
-        DSN string `yaml:"dsn"`
-    } `yaml:"db"`
+type DBConfig struct {
+	DSN string
+}
+
+type JWTConfig struct {
+	Secret     string
+	TTLMinutes int
+}
+
+type AMIConfig struct {
+	Addr     string
+	Username string
+	Password string
 }
 
 func Load() *Config {
-    data, err := os.ReadFile("config.yaml")
-    if err != nil {
-        panic(err)
-    }
+	cfg := &Config{}
 
-    var c Config
-    if err := yaml.Unmarshal(data, &c); err != nil {
-        panic(err)
-    }
+	// -------------------
+	// HTTP
+	// -------------------
+	cfg.HTTP.Addr = getEnv("HTTP_ADDR", ":8080")
 
-    return &c
+	// -------------------
+	// DATABASE
+	// -------------------
+	cfg.DB.DSN = getEnv(
+		"DB_DSN",
+		"postgres://postgres:postgres@172.20.40.2:5432/postgres?sslmode=disable",
+	)
+
+	// -------------------
+	// JWT
+	// -------------------
+	cfg.JWT.Secret = getEnv("JWT_SECRET", "CHANGE_ME_SECRET")
+	cfg.JWT.TTLMinutes = getEnvInt("JWT_TTL_MINUTES", 60)
+
+	// -------------------
+	// ASTERISK AMI
+	// -------------------
+	cfg.AMI.Addr = getEnv("AMI_ADDR", "172.20.40.3:5038")
+	cfg.AMI.Username = getEnv("AMI_USER", "asterisk")
+	cfg.AMI.Password = getEnv("AMI_PASS", "asterisk")
+
+	log.Println("✅ Config loaded")
+
+	return cfg
+}
+
+/* =======================
+   HELPERS
+======================= */
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func getEnvInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return def
 }

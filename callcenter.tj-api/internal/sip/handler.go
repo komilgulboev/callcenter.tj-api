@@ -49,10 +49,10 @@ func (h *Handler) GetCredentials(w http.ResponseWriter, r *http.Request) {
 			s.sip_domain,
 			s.ws_url
 		FROM user_sip_bindings b
-		JOIN ps_auths pa
+		JOIN ast_ps_auths pa
 		  ON pa.username = b.sip_username
 		 AND pa.tenant_id = b.tenant_id
-		JOIN asterisk_servers s
+		JOIN ast_asterisk_servers s
 		  ON s.id = b.asterisk_server_id
 		WHERE
 			b.user_id = $1
