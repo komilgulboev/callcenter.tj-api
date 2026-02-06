@@ -2,108 +2,112 @@ package monitor
 
 import "sync"
 
-// =======================
-// MODELS
-// =======================
+// =========================
+// TENANT STATE
+// =========================
 
-type AgentState struct {
-	Exten    string `json:"exten"`
-	State    string `json:"state"`
-	TenantID int    `json:"tenantId"`
+type tenantState struct {
+	Agents map[string]*AgentState
+	Calls  map[string]*Call
+
+	agentSubs []chan AgentEvent
+	callSubs  []chan CallEvent
 }
 
-type Subscriber chan AgentState
-
-// =======================
-// STORE (AGENTS ONLY)
-// =======================
+// =========================
+// STORE
+// =========================
 
 type Store struct {
-	mu sync.RWMutex
-
-	// tenantID → exten → agent
-	agents map[int]map[string]AgentState
-
-	// tenantID → subscribers
-	subscribers map[int][]Subscriber
+	mu      sync.RWMutex
+	tenants map[int]*tenantState
 }
-
-// =======================
-// CONSTRUCTOR
-// =======================
 
 func NewStore() *Store {
 	return &Store{
-		agents:      make(map[int]map[string]AgentState),
-		subscribers: make(map[int][]Subscriber),
+		tenants: make(map[int]*tenantState),
 	}
 }
 
-// =======================
-// UPDATE AGENT
-// =======================
+// =========================
+// INTERNAL
+// =========================
 
-func (s *Store) UpdateAgent(tenantID int, exten, state string) {
+func (s *Store) getTenant(id int) *tenantState {
+	t, ok := s.tenants[id]
+	if !ok {
+		t = &tenantState{
+			Agents: make(map[string]*AgentState),
+			Calls:  make(map[string]*Call),
+		}
+		s.tenants[id] = t
+	}
+	return t
+}
+
+// =========================
+// AGENT HELPERS
+// =========================
+
+// GetAgent нужен, чтобы НЕ затирать CallID
+func (s *Store) GetAgent(tenantID int, name string) *AgentState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if t, ok := s.tenants[tenantID]; ok {
+		if a, ok := t.Agents[name]; ok {
+			copy := *a
+			return &copy
+		}
+	}
+	return nil
+}
+
+// =========================
+// SUBSCRIBE / UNSUBSCRIBE
+// =========================
+
+// --- Agents ---
+
+func (s *Store) SubscribeAgents(tenantID int, ch chan AgentEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.agents[tenantID]; !ok {
-		s.agents[tenantID] = make(map[string]AgentState)
-	}
+	t := s.getTenant(tenantID)
+	t.agentSubs = append(t.agentSubs, ch)
+}
 
-	agent := AgentState{
-		Exten:    exten,
-		State:    state,
-		TenantID: tenantID,
-	}
+func (s *Store) UnsubscribeAgents(tenantID int, ch chan AgentEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	s.agents[tenantID][exten] = agent
-
-	for _, sub := range s.subscribers[tenantID] {
-		select {
-		case sub <- agent:
-		default:
+	t := s.getTenant(tenantID)
+	for i, c := range t.agentSubs {
+		if c == ch {
+			t.agentSubs = append(t.agentSubs[:i], t.agentSubs[i+1:]...)
+			break
 		}
 	}
 }
 
-// =======================
-// SNAPSHOT
-// =======================
+// --- Calls ---
 
-func (s *Store) Snapshot(tenantID int) []AgentState {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var res []AgentState
-	for _, a := range s.agents[tenantID] {
-		res = append(res, a)
-	}
-	return res
-}
-
-// =======================
-// WS SUBSCRIBE
-// =======================
-
-func (s *Store) Subscribe(tenantID int) Subscriber {
+func (s *Store) SubscribeCalls(tenantID int, ch chan CallEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ch := make(Subscriber, 10)
-	s.subscribers[tenantID] = append(s.subscribers[tenantID], ch)
-	return ch
+	t := s.getTenant(tenantID)
+	t.callSubs = append(t.callSubs, ch)
 }
 
-func (s *Store) Unsubscribe(tenantID int, sub Subscriber) {
+func (s *Store) UnsubscribeCalls(tenantID int, ch chan CallEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	subs := s.subscribers[tenantID]
-	for i, ssub := range subs {
-		if ssub == sub {
-			s.subscribers[tenantID] = append(subs[:i], subs[i+1:]...)
-			close(ssub)
+	t := s.getTenant(tenantID)
+	for i, c := range t.callSubs {
+		if c == ch {
+			t.callSubs = append(t.callSubs[:i], t.callSubs[i+1:]...)
 			break
 		}
 	}

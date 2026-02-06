@@ -2,103 +2,180 @@ package ami
 
 import (
 	"log"
-	"strconv"
-	"time"
+	"strings"
 
 	"callcentrix/internal/monitor"
 )
 
 type Handler struct {
-	Agents *monitor.Store
-	Calls  *monitor.CallStore
+	Agents   *monitor.Store
+	Calls    *monitor.CallStore
+	Resolver *monitor.TenantResolver
 }
 
 func (h *Handler) HandleEvent(event map[string]string) {
-	eventName := event["Event"]
 
-	log.Println("AMI RAW EVENT:", event)
+	ev := event["Event"]
 
-	switch eventName {
+	tenantID := h.Resolver.Resolve(event)
+	if tenantID <= 0 {
+		return
+	}
 
-	// =======================
-	// AGENT STATE
-	// =======================
+	log.Printf(
+		"AMI Event=%s Channel=%s → tenant=%d",
+		ev,
+		event["Channel"],
+		tenantID,
+	)
+
+	switch ev {
+
 	case "DeviceStateChange":
-		device := event["Device"]
-		state := event["State"]
+		h.handleDeviceStateChange(tenantID, event)
 
-		exten := parseExten(device)
-		if exten == "" {
-			return
-		}
+	case "DialBegin":
+		h.handleDialBegin(tenantID, event)
 
-		tenantID, _ := strconv.Atoi(exten) // ⚠ временно
-		h.Agents.UpdateAgent(tenantID, exten, state)
-
-	// =======================
-	// NEW CALL
-	// =======================
-	case "Newchannel":
-		linkedid := event["Linkedid"]
-		from := event["CallerIDNum"]
-		to := event["Exten"]
-
-		if linkedid == "" || from == "" || to == "" {
-			return
-		}
-
-		tenantID, _ := strconv.Atoi(to)
-
-		h.Calls.Upsert(monitor.Call{
-			ID:        linkedid,
-			From:      from,
-			To:        to,
-			State:     monitor.CallRinging,
-			TenantID:  tenantID,
-			StartTime: time.Now().Unix(),
-		})
-
-	// =======================
-	// CALL ANSWER
-	// =======================
 	case "BridgeEnter":
-		linkedid := event["Linkedid"]
-		exten := event["Exten"]
+		h.handleBridgeEnter(tenantID, event)
 
-		if linkedid == "" || exten == "" {
-			return
-		}
-
-		tenantID, _ := strconv.Atoi(exten)
-
-		h.Calls.Upsert(monitor.Call{
-			ID:        linkedid,
-			State:     monitor.CallActive,
-			TenantID:  tenantID,
-			StartTime: time.Now().Unix(),
-		})
-
-	// =======================
-	// CALL END
-	// =======================
 	case "Hangup":
-		linkedid := event["Linkedid"]
-		exten := event["Exten"]
-
-		if linkedid == "" || exten == "" {
-			return
-		}
-
-		tenantID, _ := strconv.Atoi(exten)
-		h.Calls.End(tenantID, linkedid)
+		h.handleHangup(tenantID, event)
 	}
 }
 
-func parseExten(device string) string {
-	for i := len(device) - 1; i >= 0; i-- {
-		if device[i] == '/' {
-			return device[i+1:]
+// =========================
+// DEVICE STATE
+// =========================
+
+func (h *Handler) handleDeviceStateChange(tenantID int, e map[string]string) {
+
+	device := e["Device"] // PJSIP/110001
+	if !strings.HasPrefix(device, "PJSIP/") {
+		return
+	}
+
+	agent := strings.TrimPrefix(device, "PJSIP/")
+	state := strings.ToUpper(e["State"])
+
+	status := mapDeviceState(state)
+
+	h.Agents.UpdateAgent(tenantID, monitor.AgentState{
+		Name:   agent,
+		Status: status,
+	})
+}
+
+func mapDeviceState(state string) string {
+	switch state {
+	case "NOT_INUSE":
+		return "idle"
+	case "INUSE", "BUSY", "ONHOLD", "UNKNOWN":
+		return "in-call"
+	case "RINGING":
+		return "ringing"
+	case "UNAVAILABLE", "INVALID":
+		return "offline"
+	default:
+		return "idle"
+	}
+}
+
+// =========================
+// DIAL BEGIN
+// =========================
+
+func (h *Handler) handleDialBegin(tenantID int, e map[string]string) {
+
+	callID := e["Linkedid"]
+	if callID == "" {
+		callID = e["Uniqueid"]
+	}
+
+	call := monitor.Call{
+		ID:    callID,
+		From:  e["CallerIDNum"],
+		To:    e["DestCallerIDNum"],
+		State: "dialing",
+	}
+
+	h.Calls.UpdateCall(tenantID, call)
+
+	agent := extractAgentFromChannel(e["Channel"])
+	if agent != "" {
+		h.Agents.UpdateAgent(tenantID, monitor.AgentState{
+			Name:   agent,
+			Status: "ringing",
+			CallID: callID,
+		})
+	}
+}
+
+// =========================
+// BRIDGE ENTER
+// =========================
+
+func (h *Handler) handleBridgeEnter(tenantID int, e map[string]string) {
+
+	callID := e["Linkedid"]
+	if callID == "" {
+		return
+	}
+
+	call := monitor.Call{
+		ID:    callID,
+		From:  e["CallerIDNum"],
+		To:    e["ConnectedLineNum"],
+		State: "in-call",
+	}
+
+	h.Calls.UpdateCall(tenantID, call)
+
+	agent := extractAgentFromChannel(e["Channel"])
+	if agent != "" {
+		h.Agents.UpdateAgent(tenantID, monitor.AgentState{
+			Name:   agent,
+			Status: "in-call",
+			CallID: callID,
+		})
+	}
+}
+
+// =========================
+// HANGUP
+// =========================
+
+func (h *Handler) handleHangup(tenantID int, e map[string]string) {
+
+	callID := e["Linkedid"]
+	if callID == "" {
+		callID = e["Uniqueid"]
+	}
+
+	h.Calls.RemoveCall(tenantID, callID)
+
+	agent := extractAgentFromChannel(e["Channel"])
+	if agent != "" {
+		h.Agents.UpdateAgent(tenantID, monitor.AgentState{
+			Name:   agent,
+			Status: "idle",
+			CallID: "",
+		})
+	}
+}
+
+// =========================
+// HELPERS
+// =========================
+
+func extractAgentFromChannel(ch string) string {
+	if strings.HasPrefix(ch, "PJSIP/") {
+		rest := strings.TrimPrefix(ch, "PJSIP/")
+		if idx := strings.Index(rest, "-"); idx > 0 {
+			return rest[:idx]
 		}
+		return rest
 	}
 	return ""
 }

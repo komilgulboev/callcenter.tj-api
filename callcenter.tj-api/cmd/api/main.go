@@ -44,11 +44,19 @@ func main() {
 	callStore := monitor.NewCallStore()
 
 	// =========================
+	// TENANT RESOLVER
+	// =========================
+
+	tenantResolver := monitor.NewTenantResolver(pool)
+
+
+	// =========================
 	// AMI HANDLER
 	// =========================
 	amiHandler := &ami.Handler{
-		Agents: agentStore,
-		Calls:  callStore,
+		Agents:   agentStore,
+		Calls:    callStore,
+		Resolver: tenantResolver,
 	}
 
 	amiService, err := ami.NewService(
@@ -120,6 +128,7 @@ func main() {
 	// WEBSOCKET MONITOR
 	// =========================
 	r.Get("/ws/monitor", ws.Monitor(agentStore, callStore, cfg))
+	
 
 	// =========================
 	// PROTECTED API

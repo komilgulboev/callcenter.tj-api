@@ -25,6 +25,7 @@ func NewService(addr, user, pass string, onEvent func(map[string]string)) (*Serv
 }
 
 func (s *Service) Start() {
+
 	conn, err := net.Dial("tcp", s.addr)
 	if err != nil {
 		log.Println("AMI connect error:", err)
@@ -55,6 +56,7 @@ func (s *Service) Start() {
 		// empty line = event end
 		if line == "" {
 			if _, ok := event["Event"]; ok {
+				log.Printf("AMI RAW EVENT: %+v\n", event)
 				s.onEvent(event)
 			}
 			event = map[string]string{}

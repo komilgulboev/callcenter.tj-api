@@ -5,124 +5,94 @@ import (
 	"time"
 )
 
-type CallState string
-
-const (
-	CallRinging CallState = "RINGING"
-	CallActive  CallState = "ACTIVE"
-	CallEnded   CallState = "ENDED"
-)
-
 type Call struct {
-	ID        string    `json:"id"`        // Linkedid
+	ID        string    `json:"id"`
 	From      string    `json:"from"`
 	To        string    `json:"to"`
-	State     CallState `json:"state"`
 	TenantID  int       `json:"tenantId"`
-	StartTime int64     `json:"startTime"`
-	Duration  int64     `json:"duration"`
+	StartedAt time.Time `json:"startedAt"`
+	State     string    `json:"state"`
 }
 
-type CallSubscriber chan Call
+type CallEvent struct{}
 
 type CallStore struct {
 	mu    sync.RWMutex
-	calls map[int]map[string]Call
-	subs  map[int][]CallSubscriber
+	items map[int]map[string]Call // tenant → callID → Call
+	subs  map[int][]chan CallEvent
 }
 
 func NewCallStore() *CallStore {
 	return &CallStore{
-		calls: make(map[int]map[string]Call),
-		subs:  make(map[int][]CallSubscriber),
+		items: make(map[int]map[string]Call),
+		subs:  make(map[int][]chan CallEvent),
 	}
 }
 
-// =======================
-// UPSERT
-// =======================
-
-func (s *CallStore) Upsert(call Call) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.calls[call.TenantID]; !ok {
-		s.calls[call.TenantID] = make(map[string]Call)
-	}
-
-	s.calls[call.TenantID][call.ID] = call
-
-	for _, sub := range s.subs[call.TenantID] {
-		select {
-		case sub <- call:
-		default:
-		}
-	}
-}
-
-// =======================
-// END
-// =======================
-
-func (s *CallStore) End(tenantID int, id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	call, ok := s.calls[tenantID][id]
-	if !ok {
-		return
-	}
-
-	call.State = CallEnded
-	call.Duration = int64(time.Since(time.Unix(call.StartTime, 0)).Seconds())
-
-	for _, sub := range s.subs[tenantID] {
-		select {
-		case sub <- call:
-		default:
-		}
-	}
-
-	delete(s.calls[tenantID], id)
-}
-
-// =======================
-// SNAPSHOT
-// =======================
-
-func (s *CallStore) Snapshot(tenantID int) []Call {
+func (s *CallStore) GetCalls(tenantID int) map[string]Call {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var res []Call
-	for _, c := range s.calls[tenantID] {
-		res = append(res, c)
+	out := map[string]Call{}
+	for k, v := range s.items[tenantID] {
+		out[k] = v
 	}
-	return res
+	return out
 }
 
-// =======================
-// SUBSCRIBE
-// =======================
-
-func (s *CallStore) Subscribe(tenantID int) CallSubscriber {
+func (s *CallStore) UpdateCall(tenantID int, call Call) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ch := make(CallSubscriber, 10)
+	if s.items[tenantID] == nil {
+		s.items[tenantID] = make(map[string]Call)
+	}
+
+	// ⏱️ если первый раз — фиксируем старт
+	if old, ok := s.items[tenantID][call.ID]; ok {
+		call.StartedAt = old.StartedAt
+	} else {
+		call.StartedAt = time.Now()
+	}
+
+	s.items[tenantID][call.ID] = call
+
+	for _, ch := range s.subs[tenantID] {
+		select {
+		case ch <- CallEvent{}:
+		default:
+		}
+	}
+}
+
+func (s *CallStore) RemoveCall(tenantID int, callID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.items[tenantID], callID)
+
+	for _, ch := range s.subs[tenantID] {
+		select {
+		case ch <- CallEvent{}:
+		default:
+		}
+	}
+}
+
+func (s *CallStore) Subscribe(tenantID int, ch chan CallEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.subs[tenantID] = append(s.subs[tenantID], ch)
-	return ch
 }
 
-func (s *CallStore) Unsubscribe(tenantID int, sub CallSubscriber) {
+func (s *CallStore) Unsubscribe(tenantID int, ch chan CallEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	subs := s.subs[tenantID]
-	for i, ssub := range subs {
-		if ssub == sub {
-			s.subs[tenantID] = append(subs[:i], subs[i+1:]...)
-			close(ssub)
+	list := s.subs[tenantID]
+	for i, c := range list {
+		if c == ch {
+			s.subs[tenantID] = append(list[:i], list[i+1:]...)
 			break
 		}
 	}
