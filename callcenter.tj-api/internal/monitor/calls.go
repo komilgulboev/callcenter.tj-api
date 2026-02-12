@@ -5,95 +5,94 @@ import (
 	"time"
 )
 
+// =========================
+// CALL MODEL
+// =========================
+
 type Call struct {
 	ID        string    `json:"id"`
 	From      string    `json:"from"`
 	To        string    `json:"to"`
-	TenantID  int       `json:"tenantId"`
+	Channel   string    `json:"channel"`   // Primary channel (для обратной совместимости)
+	Channels  []string  `json:"channels"`  // Все каналы участников звонка
 	StartedAt time.Time `json:"startedAt"`
-	State     string    `json:"state"`
 }
 
-type CallEvent struct{}
+// =========================
+// CALL STORE
+// =========================
 
 type CallStore struct {
 	mu    sync.RWMutex
-	items map[int]map[string]Call // tenant → callID → Call
-	subs  map[int][]chan CallEvent
+	calls map[int]map[string]Call // tenantID → callID → Call
 }
 
 func NewCallStore() *CallStore {
 	return &CallStore{
-		items: make(map[int]map[string]Call),
-		subs:  make(map[int][]chan CallEvent),
+		calls: make(map[int]map[string]Call),
 	}
 }
 
-func (s *CallStore) GetCalls(tenantID int) map[string]Call {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	out := map[string]Call{}
-	for k, v := range s.items[tenantID] {
-		out[k] = v
-	}
-	return out
-}
+// =========================
+// PUBLIC API
+// =========================
 
 func (s *CallStore) UpdateCall(tenantID int, call Call) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.items[tenantID] == nil {
-		s.items[tenantID] = make(map[string]Call)
+	if s.calls[tenantID] == nil {
+		s.calls[tenantID] = make(map[string]Call)
 	}
 
-	// ⏱️ если первый раз — фиксируем старт
-	if old, ok := s.items[tenantID][call.ID]; ok {
-		call.StartedAt = old.StartedAt
-	} else {
+	// если звонок новый — фиксируем старт и создаём массив каналов
+	if existing, ok := s.calls[tenantID][call.ID]; !ok {
 		call.StartedAt = time.Now()
-	}
-
-	s.items[tenantID][call.ID] = call
-
-	for _, ch := range s.subs[tenantID] {
-		select {
-		case ch <- CallEvent{}:
-		default:
+		// Инициализируем массив каналов
+		if call.Channel != "" {
+			call.Channels = []string{call.Channel}
+		}
+	} else {
+		// Звонок уже существует - сохраняем StartedAt
+		call.StartedAt = existing.StartedAt
+		
+		// Объединяем каналы (добавляем новый если его нет)
+		call.Channels = existing.Channels
+		if call.Channel != "" {
+			channelExists := false
+			for _, ch := range call.Channels {
+				if ch == call.Channel {
+					channelExists = true
+					break
+				}
+			}
+			if !channelExists {
+				call.Channels = append(call.Channels, call.Channel)
+			}
 		}
 	}
+
+	s.calls[tenantID][call.ID] = call
 }
 
 func (s *CallStore) RemoveCall(tenantID int, callID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	delete(s.items[tenantID], callID)
-
-	for _, ch := range s.subs[tenantID] {
-		select {
-		case ch <- CallEvent{}:
-		default:
-		}
+	if _, ok := s.calls[tenantID]; !ok {
+		return
 	}
+
+	delete(s.calls[tenantID], callID)
 }
 
-func (s *CallStore) Subscribe(tenantID int, ch chan CallEvent) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.subs[tenantID] = append(s.subs[tenantID], ch)
-}
+func (s *CallStore) GetCalls(tenantID int) map[string]Call {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-func (s *CallStore) Unsubscribe(tenantID int, ch chan CallEvent) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	list := s.subs[tenantID]
-	for i, c := range list {
-		if c == ch {
-			s.subs[tenantID] = append(list[:i], list[i+1:]...)
-			break
-		}
+	out := make(map[string]Call)
+	for k, v := range s.calls[tenantID] {
+		out[k] = v
 	}
+	return out
 }

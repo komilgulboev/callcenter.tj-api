@@ -3,7 +3,6 @@ package ami
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"net"
 	"strings"
 	"time"
@@ -33,7 +32,7 @@ func NewClient(addr, user, pass string) (*Client, error) {
 		return nil, err
 	}
 
-	log.Println("✅ AMI connected")
+	//log.Println("✅ AMI connected")
 
 	return &Client{
 		conn: conn,
@@ -68,7 +67,7 @@ func (c *Client) ReadLoop(handler func(map[string]string)) {
 	for {
 		ev, err := c.ReadEvent()
 		if err != nil {
-			log.Println("AMI read error:", err)
+			//log.Println("AMI read error:", err)
 			time.Sleep(time.Second)
 			continue
 		}

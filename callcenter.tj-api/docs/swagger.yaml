@@ -23,12 +23,58 @@ definitions:
       wsUrl:
         type: string
     type: object
+host: localhost:8080
 info:
-  contact: {}
-  description: CRM + VoIP backend
+  contact:
+    email: support@callcentrix.com
+    name: API Support
+  description: API for call center monitoring and control
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
   title: CallCentrix API
   version: "1.0"
 paths:
+  /api/actions/hangup:
+    post:
+      consumes:
+      - application/json
+      description: Force hangup call by callId (Linkedid)
+      parameters:
+      - description: Call Linkedid
+        in: query
+        name: callId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+        "400":
+          description: missing callId
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: call not found
+          schema:
+            type: string
+        "500":
+          description: AMI not available
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Hangup call
+      tags:
+      - Actions
   /api/auth/login:
     post:
       consumes:
@@ -65,7 +111,7 @@ paths:
       - Auth
   /api/sip/credentials:
     get:
-      description: Returns SIP credentials for authenticated user
+      description: Returns SIP credentials for authenticated user (webphone)
       produces:
       - application/json
       responses:
@@ -88,6 +134,7 @@ paths:
       - SIP
 securityDefinitions:
   BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token
     in: header
     name: Authorization
     type: apiKey

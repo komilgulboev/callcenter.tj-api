@@ -1,13 +1,83 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "CRM + VoIP backend",
+        "description": "API for call center monitoring and control",
         "title": "CallCentrix API",
-        "contact": {},
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "email": "support@callcentrix.com"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
         "version": "1.0"
     },
+    "host": "localhost:8080",
     "basePath": "/",
     "paths": {
+        "/api/actions/hangup": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Force hangup call by callId (Linkedid)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Actions"
+                ],
+                "summary": "Hangup call",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Call Linkedid",
+                        "name": "callId",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "missing callId",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "call not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "AMI not available",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/api/auth/login": {
             "post": {
                 "description": "Authenticate user and return JWT token",
@@ -67,7 +137,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns SIP credentials for authenticated user",
+                "description": "Returns SIP credentials for authenticated user (webphone)",
                 "produces": [
                     "application/json"
                 ],
@@ -138,6 +208,7 @@
     },
     "securityDefinitions": {
         "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and JWT token",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

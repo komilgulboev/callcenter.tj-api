@@ -17,45 +17,48 @@ import (
 	"callcentrix/internal/monitor"
 	"callcentrix/internal/sip"
 	"callcentrix/internal/ws"
+	"callcentrix/internal/handlers"
 
 	_ "callcentrix/docs"
 )
+// @title           CallCentrix API
+// @version         1.0
+// @description     API for call center monitoring and control
+// @termsOfService  http://swagger.io/terms/
 
+// @contact.name   API Support
+// @contact.email  support@callcentrix.com
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8080
+// @BasePath  /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token
 func main() {
-	// =========================
-	// CONFIG
-	// =========================
 	cfg := config.Load()
 	log.Println("✅ Config loaded")
 
-	// =========================
-	// DB
-	// =========================
 	pool, err := db.New(cfg.DB.DSN)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pool.Close()
 
-	// =========================
-	// STORES
-	// =========================
 	agentStore := monitor.NewStore()
 	callStore := monitor.NewCallStore()
-
-	// =========================
-	// TENANT RESOLVER
-	// =========================
+	queueStore := monitor.NewQueueStore()
 
 	tenantResolver := monitor.NewTenantResolver(pool)
 
-
-	// =========================
-	// AMI HANDLER
-	// =========================
 	amiHandler := &ami.Handler{
 		Agents:   agentStore,
 		Calls:    callStore,
+		Queues:   queueStore,
 		Resolver: tenantResolver,
 	}
 
@@ -69,23 +72,29 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go func() {
-		log.Println("📡 Starting AMI service")
-		amiService.Start()
-	}()
+	go amiService.Start()
 
-	// =========================
-	// ROUTER
-	// =========================
+	actionsHandler := &ami.ActionsHandler{
+		DB:     pool,
+		AMI:    amiService,
+		Calls:  callStore,
+		Agents: agentStore,
+	}
+
+	agentsInfoHandler := &handlers.AgentsInfoHandler{
+		DB:     pool,
+		Agents: agentStore,
+	}
 	r := chi.NewRouter()
 
 	// =========================
-	// CORS
+	// 🔥 CORS ДОЛЖЕН БЫТЬ ПЕРВЫМ
 	// =========================
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{
 			"http://localhost:3000",
 			"http://localhost:5173",
+			"http://localhost:8080",
 		},
 		AllowedMethods: []string{
 			"GET", "POST", "PUT", "DELETE", "OPTIONS",
@@ -95,44 +104,36 @@ func main() {
 			"Authorization",
 			"Content-Type",
 		},
+		ExposedHeaders: []string{
+			"Authorization",
+		},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
-	// =========================
-	// HEALTH
-	// =========================
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
 	})
 
-	// =========================
-	// HANDLERS
-	// =========================
 	authHandler := &auth.Handler{
 		DB:     pool,
 		Secret: cfg.JWT.Secret,
 		TTL:    time.Minute * time.Duration(cfg.JWT.TTLMinutes),
 	}
 
-	sipHandler := &sip.Handler{
-		DB: pool,
-	}
+	sipHandler := &sip.Handler{DB: pool}
 
-	// =========================
-	// PUBLIC
-	// =========================
+	// ================= PUBLIC =================
 	r.Post("/api/auth/login", authHandler.Login)
 
-	// =========================
-	// WEBSOCKET MONITOR
-	// =========================
-	r.Get("/ws/monitor", ws.Monitor(agentStore, callStore, cfg))
-	
+	r.Get("/ws/monitor", ws.Monitor(
+		agentStore,
+		callStore,
+		queueStore,
+		cfg,
+	))
 
-	// =========================
-	// PROTECTED API
-	// =========================
+	// ================= PROTECTED =================
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(cfg.JWT.Secret))
 
@@ -141,18 +142,13 @@ func main() {
 		})
 
 		r.Get("/api/sip/credentials", sipHandler.GetCredentials)
+		r.Get("/api/agents/info", agentsInfoHandler.GetAgentsInfo)
+		r.Post("/api/actions/pause", actionsHandler.TogglePause)
+		r.Post("/api/actions/hangup", actionsHandler.Hangup)
 	})
 
-	// =========================
-	// SWAGGER
-	// =========================
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
-	// =========================
-	// START
-	// =========================
 	log.Printf("🚀 HTTP server started on %s\n", cfg.HTTP.Addr)
-	if err := http.ListenAndServe(cfg.HTTP.Addr, r); err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal(http.ListenAndServe(cfg.HTTP.Addr, r))
 }

@@ -46,6 +46,7 @@ func Load() *Config {
 	cfg.DB.DSN = getEnv(
 		"DB_DSN",
 		"postgres://postgres:postgres@172.20.40.2:5432/postgres?sslmode=disable",
+		
 	)
 
 	// -------------------

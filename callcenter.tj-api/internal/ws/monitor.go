@@ -13,28 +13,25 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 type snapshot struct {
 	Type   string                         `json:"type"`
 	Agents map[string]monitor.AgentState `json:"agents"`
 	Calls  map[string]monitor.Call       `json:"calls"`
+	Queues map[string]monitor.QueueStats `json:"queues"`
 }
 
 func Monitor(
 	agentStore *monitor.Store,
 	callStore *monitor.CallStore,
+	queueStore *monitor.QueueStore,
 	cfg *config.Config,
 ) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		// =========================
-		// AUTH (JWT via query)
-		// =========================
 		token := r.URL.Query().Get("token")
 		if token == "" {
 			http.Error(w, "missing token", http.StatusUnauthorized)
@@ -49,63 +46,61 @@ func Monitor(
 
 		tenantID := user.TenantID
 
-		// =========================
-		// WS UPGRADE
-		// =========================
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Println("ws upgrade error:", err)
 			return
 		}
-		defer func() {
-			conn.Close()
-			log.Printf("🔴 WS closed | tenant=%d\n", tenantID)
-		}()
+		defer conn.Close()
 
-		log.Printf("🟢 WS connected | tenant=%d\n", tenantID)
+		log.Printf("🟢 WS connected | tenant=%d", tenantID)
 
-		// =========================
-		// INITIAL SNAPSHOT
-		// =========================
-		if err := safeWrite(conn, snapshot{
-			Type:   "snapshot",
-			Agents: agentStore.GetAgents(tenantID),
-			Calls:  callStore.GetCalls(tenantID),
-		}); err != nil {
-			return
+		writeSnapshot := func() error {
+			snap := snapshot{
+				Type:   "snapshot",
+				Agents: agentStore.GetAgents(tenantID),
+				Calls:  callStore.GetCalls(tenantID),
+				Queues: queueStore.Snapshot(tenantID),
+			}
+			
+			log.Printf("📡 WS Snapshot | tenant=%d | agents=%d | calls=%d | queues=%d", 
+				tenantID, len(snap.Agents), len(snap.Calls), len(snap.Queues))
+			
+			// Логируем детали звонков для отладки
+			for callID, call := range snap.Calls {
+				log.Printf("  📞 Call: id=%s, from=%s, to=%s, channel=%s", 
+					callID, call.From, call.To, call.Channel)
+			}
+			
+			return conn.WriteJSON(snap)
 		}
 
-		log.Printf(
-			"WS snapshot tenant=%d agents=%d calls=%d\n",
-			tenantID,
-			len(agentStore.GetAgents(tenantID)),
-			len(callStore.GetCalls(tenantID)),
-		)
-
-		// =========================
-		// SUBSCRIBE
-		// =========================
+		// 🔥 первый снапшот
+		if err := writeSnapshot(); err != nil {
+			return
+		}
+		
+		// 🔔 subscriptions
 		agentCh := make(chan monitor.AgentEvent, 16)
-
 		agentStore.SubscribeAgents(tenantID, agentCh)
 		defer agentStore.UnsubscribeAgents(tenantID, agentCh)
 
+		queueCh := make(chan struct{}, 16)
+		queueStore.Subscribe(tenantID, queueCh)
+		defer queueStore.Unsubscribe(tenantID, queueCh)
 
 		heartbeat := time.NewTicker(25 * time.Second)
 		defer heartbeat.Stop()
 
-		// =========================
-		// LOOP
-		// =========================
 		for {
 			select {
 
 			case <-agentCh:
-				if err := safeWrite(conn, snapshot{
-					Type:   "snapshot",
-					Agents: agentStore.GetAgents(tenantID),
-					Calls:  callStore.GetCalls(tenantID),
-				}); err != nil {
+				if err := writeSnapshot(); err != nil {
+					return
+				}
+
+			case <-queueCh:
+				if err := writeSnapshot(); err != nil {
 					return
 				}
 
@@ -120,17 +115,4 @@ func Monitor(
 			}
 		}
 	}
-}
-
-// =========================
-// SAFE WRITE
-// =========================
-
-func safeWrite(conn *websocket.Conn, v any) error {
-	conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-	if err := conn.WriteJSON(v); err != nil {
-		log.Println("ws write error:", err)
-		return err
-	}
-	return nil
 }
