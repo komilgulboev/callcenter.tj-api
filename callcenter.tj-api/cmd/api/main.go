@@ -14,10 +14,10 @@ import (
 	"callcentrix/internal/auth"
 	"callcentrix/internal/config"
 	"callcentrix/internal/db"
+	"callcentrix/internal/handlers"
 	"callcentrix/internal/monitor"
 	"callcentrix/internal/sip"
 	"callcentrix/internal/ws"
-	"callcentrix/internal/handlers"
 
 	_ "callcentrix/docs"
 )
@@ -85,6 +85,7 @@ func main() {
 		DB:     pool,
 		Agents: agentStore,
 	}
+
 	r := chi.NewRouter()
 
 	// =========================
@@ -143,6 +144,7 @@ func main() {
 
 		r.Get("/api/sip/credentials", sipHandler.GetCredentials)
 		r.Get("/api/agents/info", agentsInfoHandler.GetAgentsInfo)
+
 		r.Post("/api/actions/pause", actionsHandler.TogglePause)
 		r.Post("/api/actions/hangup", actionsHandler.Hangup)
 	})

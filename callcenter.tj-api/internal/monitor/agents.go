@@ -7,11 +7,10 @@ import "sync"
 // =========================
 
 type AgentState struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	CallID string `json:"callId,omitempty"`
-	FirstName string `json:"firstName,omitempty"`  // ← ДОБАВИТЬ
-    LastName  string `json:"lastName,omitempty"` 
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	CallID    string `json:"callId,omitempty"`
+	IPAddress string `json:"ipAddress,omitempty"` // IP адрес агента
 }
 
 type AgentEvent struct {

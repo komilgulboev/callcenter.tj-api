@@ -63,8 +63,35 @@ func (s *Service) Start() {
 		log.Println("📡 AMI: requesting DeviceStateList")
 		_ = s.SendAction("DeviceStateList", nil)
 
-		log.Println("📡 AMI: requesting QueueStatus") // 🔥 ВОТ ЗДЕСЬ ЗАПРОС ОЧЕРЕДЕЙ
+		log.Println("📡 AMI: requesting QueueStatus")
 		_ = s.SendAction("QueueStatus", nil)
+		
+		// 🔍 Запрашиваем информацию о PJSIP endpoints
+		log.Println("📡 AMI: requesting PJSIPShowEndpoints")
+		_ = s.SendAction("PJSIPShowEndpoints", nil)
+		
+		log.Println("📡 AMI: requesting PJSIPShowContacts")
+		_ = s.SendAction("PJSIPShowContacts", nil)
+		
+		log.Println("📡 AMI: requesting PJSIPShowAors")
+		_ = s.SendAction("PJSIPShowAors", nil)
+		
+		// Повторяем запрос контактов через 2 секунды
+		// чтобы агенты успели загрузиться в Store
+		time.Sleep(2 * time.Second)
+		log.Println("📡 AMI: requesting PJSIPShowContacts (retry)")
+		_ = s.SendAction("PJSIPShowContacts", nil)
+		
+		// Периодическая проверка активных каналов каждые 5 секунд
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			
+			for range ticker.C {
+				// Запрашиваем список активных каналов
+				_ = s.SendAction("CoreShowChannels", nil)
+			}
+		}()
 	}()
 
 	reader := bufio.NewReader(conn)
@@ -78,12 +105,21 @@ func (s *Service) Start() {
 		}
 
 		// 🔥🔥🔥 СЫРОЙ ЛОГ AMI — САМОЕ ВАЖНОЕ
-		//log.Printf("AMI RAW: %s", line)
+		// log.Printf("AMI RAW: %s", line)
 
 		line = strings.TrimSpace(line)
 
 		if line == "" {
-			if _, ok := event["Event"]; ok {
+			if eventType, ok := event["Event"]; ok {
+				// 🔍 Логируем интересные события полностью
+				if eventType == "PeerStatus" || 
+				   eventType == "ContactStatus" || 
+				   eventType == "EndpointDetail" ||
+				   eventType == "AorDetail" ||
+				   strings.Contains(eventType, "Contact") ||
+				   strings.Contains(eventType, "Peer") {
+					log.Printf("🔍 AMI EVENT [%s]: %+v", eventType, event)
+				}
 				s.onEvent(event)
 			}
 			event = map[string]string{}
