@@ -12,6 +12,177 @@ definitions:
       token:
         type: string
     type: object
+  handlers.AddTicketUpdateRequest:
+    properties:
+      callFrom:
+        type: string
+      callUniqueid:
+        type: string
+      description:
+        type: string
+      statusId:
+        type: integer
+    type: object
+  handlers.AssignCatalogRequest:
+    properties:
+      catalogId:
+        type: integer
+      userId:
+        type: integer
+    type: object
+  handlers.CatalogRequest:
+    properties:
+      active:
+        type: boolean
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  handlers.CatalogResponse:
+    properties:
+      active:
+        type: boolean
+      createdAt:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      tenantId:
+        type: integer
+    type: object
+  handlers.CategoryRequest:
+    properties:
+      active:
+        type: boolean
+      catalogId:
+        type: integer
+      name:
+        type: string
+      sortOrder:
+        type: integer
+    type: object
+  handlers.CategoryResponse:
+    properties:
+      active:
+        type: boolean
+      catalogId:
+        type: integer
+      createdAt:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      sortOrder:
+        type: integer
+      tenantId:
+        type: integer
+    type: object
+  handlers.ChangeStatusRequest:
+    properties:
+      statusId:
+        type: integer
+    type: object
+  handlers.CreateTicketRequest:
+    properties:
+      callFrom:
+        type: string
+      callUniqueid:
+        type: string
+      categoryId:
+        type: integer
+      description:
+        type: string
+      subject:
+        type: string
+    type: object
+  handlers.CreateTicketResponse:
+    properties:
+      id:
+        type: integer
+    type: object
+  handlers.StatusRequest:
+    properties:
+      code:
+        type: string
+      color:
+        type: string
+      isClosed:
+        type: boolean
+      isDefault:
+        type: boolean
+      sortOrder:
+        type: integer
+    type: object
+  handlers.StatusResponse:
+    properties:
+      code:
+        type: string
+      color:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: integer
+      isClosed:
+        type: boolean
+      isDefault:
+        type: boolean
+      sortOrder:
+        type: integer
+      tenantId:
+        type: integer
+    type: object
+  handlers.TicketItem:
+    properties:
+      callFrom:
+        type: string
+      callUniqueid:
+        type: string
+      categoryId:
+        type: integer
+      categoryName:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
+        type: integer
+      createdByName:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      statusCode:
+        type: string
+      statusColor:
+        type: string
+      statusId:
+        type: integer
+      subject:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  handlers.UserCatalogResponse:
+    properties:
+      catalogId:
+        type: integer
+      catalogName:
+        type: string
+      firstName:
+        type: string
+      lastName:
+        type: string
+      userId:
+        type: integer
+      username:
+        type: string
+    type: object
   sip.CredentialsResponse:
     properties:
       domain:
@@ -109,6 +280,746 @@ paths:
       summary: User login
       tags:
       - Auth
+  /api/crm/catalog-assignments:
+    get:
+      description: Возвращает всех пользователей тенанта с информацией о назначенном
+        каталоге
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.UserCatalogResponse'
+            type: array
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Список назначений каталогов
+      tags:
+      - CRM Catalog Assignments
+    post:
+      consumes:
+      - application/json
+      description: Назначает каталог пользователю. Если уже был назначен — заменяет.
+      parameters:
+      - description: userId и catalogId
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AssignCatalogRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: user or catalog does not belong to tenant
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Назначить каталог пользователю
+      tags:
+      - CRM Catalog Assignments
+  /api/crm/catalog-assignments/{userId}:
+    delete:
+      description: Удаляет назначение каталога у пользователя
+      parameters:
+      - description: ID пользователя
+        in: path
+        name: userId
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: assignment not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Снять каталог с пользователя
+      tags:
+      - CRM Catalog Assignments
+  /api/crm/catalogs:
+    get:
+      description: Возвращает все каталоги тенанта
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.CatalogResponse'
+            type: array
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Список каталогов
+      tags:
+      - CRM Catalogs
+    post:
+      consumes:
+      - application/json
+      description: Создаёт новый каталог для тенанта
+      parameters:
+      - description: Данные каталога
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CatalogRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.CatalogResponse'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "409":
+          description: catalog with this name already exists
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Создать каталог
+      tags:
+      - CRM Catalogs
+  /api/crm/catalogs/{id}:
+    delete:
+      description: Удаляет каталог и все его категории (CASCADE)
+      parameters:
+      - description: ID каталога
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Удалить каталог
+      tags:
+      - CRM Catalogs
+    get:
+      description: Возвращает каталог по ID вместе с его категориями
+      parameters:
+      - description: ID каталога
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Получить каталог
+      tags:
+      - CRM Catalogs
+    put:
+      consumes:
+      - application/json
+      description: Обновляет название, описание или статус каталога
+      parameters:
+      - description: ID каталога
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Данные каталога
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CatalogRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.CatalogResponse'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "409":
+          description: catalog with this name already exists
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Обновить каталог
+      tags:
+      - CRM Catalogs
+  /api/crm/categories:
+    get:
+      description: Возвращает все категории для указанного каталога
+      parameters:
+      - description: ID каталога
+        in: query
+        name: catalogId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.CategoryResponse'
+            type: array
+        "400":
+          description: catalogId required
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Список категорий каталога
+      tags:
+      - CRM Categories
+    post:
+      consumes:
+      - application/json
+      description: Создаёт новую категорию внутри каталога
+      parameters:
+      - description: Данные категории
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.CategoryResponse'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: catalog does not belong to tenant
+          schema:
+            type: string
+        "409":
+          description: category with this name already exists
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Создать категорию
+      tags:
+      - CRM Categories
+  /api/crm/categories/{id}:
+    delete:
+      description: Удаляет категорию. Заявки с этой категорией переходят в category_id
+        = NULL
+      parameters:
+      - description: ID категории
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Удалить категорию
+      tags:
+      - CRM Categories
+    put:
+      consumes:
+      - application/json
+      description: Обновляет название, порядок сортировки или статус категории
+      parameters:
+      - description: ID категории
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Данные категории
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.CategoryResponse'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "409":
+          description: category with this name already exists
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Обновить категорию
+      tags:
+      - CRM Categories
+  /api/crm/my-catalog:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: catalog not assigned
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Получить каталог текущего пользователя
+      tags:
+      - CRM Tickets
+  /api/crm/statuses:
+    get:
+      description: Возвращает все статусы тенанта упорядоченные по sort_order
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.StatusResponse'
+            type: array
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Список статусов заявок
+      tags:
+      - CRM Statuses
+    post:
+      consumes:
+      - application/json
+      description: Создаёт новый статус заявок для тенанта
+      parameters:
+      - description: Данные статуса
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.StatusRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.StatusResponse'
+        "400":
+          description: code is required
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "409":
+          description: status with this code already exists
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Создать статус
+      tags:
+      - CRM Statuses
+  /api/crm/statuses/{id}:
+    delete:
+      description: Удаляет статус. Нельзя удалить если на него ссылаются заявки.
+      parameters:
+      - description: ID статуса
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "409":
+          description: status is in use by tickets
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Удалить статус
+      tags:
+      - CRM Statuses
+    put:
+      consumes:
+      - application/json
+      description: Обновляет данные статуса
+      parameters:
+      - description: ID статуса
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Данные статуса
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.StatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.StatusResponse'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "409":
+          description: status with this code already exists
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Обновить статус
+      tags:
+      - CRM Statuses
+  /api/crm/tickets:
+    get:
+      parameters:
+      - description: Фильтр по статусу
+        in: query
+        name: statusId
+        type: integer
+      - description: Поиск по теме, номеру
+        in: query
+        name: search
+        type: string
+      - description: Лимит (по умолчанию 50)
+        in: query
+        name: limit
+        type: integer
+      - description: Смещение (по умолчанию 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.TicketItem'
+            type: array
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Список заявок
+      tags:
+      - CRM Tickets
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Данные заявки
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateTicketRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.CreateTicketResponse'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Создать заявку
+      tags:
+      - CRM Tickets
+  /api/crm/tickets/{id}:
+    get:
+      parameters:
+      - description: ID заявки
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Получить заявку
+      tags:
+      - CRM Tickets
+  /api/crm/tickets/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: ID заявки
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Новый статус
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ChangeStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Изменить статус заявки
+      tags:
+      - CRM Tickets
+  /api/crm/tickets/{id}/updates:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ID заявки
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Данные обновления
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AddTicketUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: ticket not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Добавить обновление к заявке
+      tags:
+      - CRM Tickets
   /api/sip/credentials:
     get:
       description: Returns SIP credentials for authenticated user (webphone)

@@ -82,9 +82,9 @@ func (s *Service) Start() {
 		log.Println("📡 AMI: requesting PJSIPShowContacts (retry)")
 		_ = s.SendAction("PJSIPShowContacts", nil)
 		
-		// Периодическая проверка активных каналов каждые 5 секунд
+		// Периодическая проверка активных каналов каждые 3 секунды
 		go func() {
-			ticker := time.NewTicker(5 * time.Second)
+			ticker := time.NewTicker(3 * time.Second)
 			defer ticker.Stop()
 			
 			for range ticker.C {

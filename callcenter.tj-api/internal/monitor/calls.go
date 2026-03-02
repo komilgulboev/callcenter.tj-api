@@ -23,13 +23,16 @@ type Call struct {
 // =========================
 
 type CallStore struct {
-	mu    sync.RWMutex
-	calls map[int]map[string]Call // tenantID → callID → Call
+	mu          sync.RWMutex
+	calls       map[int]map[string]Call // tenantID → callID → Call
+	subscribers map[int][]chan struct{} // tenantID → channels
+	subMu       sync.RWMutex
 }
 
 func NewCallStore() *CallStore {
 	return &CallStore{
-		calls: make(map[int]map[string]Call),
+		calls:       make(map[int]map[string]Call),
+		subscribers: make(map[int][]chan struct{}),
 	}
 }
 
@@ -73,6 +76,9 @@ func (s *CallStore) UpdateCall(tenantID int, call Call) {
 	}
 
 	s.calls[tenantID][call.ID] = call
+	
+	// ✅ УВЕДОМЛЯЕМ подписчиков!
+	s.notifySubscribers(tenantID)
 }
 
 func (s *CallStore) RemoveCall(tenantID int, callID string) {
@@ -84,6 +90,9 @@ func (s *CallStore) RemoveCall(tenantID int, callID string) {
 	}
 
 	delete(s.calls[tenantID], callID)
+	
+	// ✅ УВЕДОМЛЯЕМ подписчиков!
+	s.notifySubscribers(tenantID)
 }
 
 func (s *CallStore) GetCalls(tenantID int) map[string]Call {
@@ -95,4 +104,40 @@ func (s *CallStore) GetCalls(tenantID int) map[string]Call {
 		out[k] = v
 	}
 	return out
+}
+
+// =========================
+// SUBSCRIPTIONS
+// =========================
+
+func (s *CallStore) Subscribe(tenantID int, ch chan struct{}) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	s.subscribers[tenantID] = append(s.subscribers[tenantID], ch)
+}
+
+func (s *CallStore) Unsubscribe(tenantID int, ch chan struct{}) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	
+	subs := s.subscribers[tenantID]
+	for i, sub := range subs {
+		if sub == ch {
+			s.subscribers[tenantID] = append(subs[:i], subs[i+1:]...)
+			break
+		}
+	}
+}
+
+func (s *CallStore) notifySubscribers(tenantID int) {
+	s.subMu.RLock()
+	defer s.subMu.RUnlock()
+	
+	for _, ch := range s.subscribers[tenantID] {
+		select {
+		case ch <- struct{}{}:
+		default:
+			// Канал заполнен, пропускаем
+		}
+	}
 }

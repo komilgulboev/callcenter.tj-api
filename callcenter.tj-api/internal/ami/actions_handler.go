@@ -1,6 +1,7 @@
 package ami
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -198,4 +199,42 @@ func (h *ActionsHandler) Hangup(w http.ResponseWriter, r *http.Request) {
 	log.Printf("🗑️ Call removed from CallStore: callID=%s", callID)
 	
 	w.WriteHeader(http.StatusOK)
+}
+// GetMyActiveCall godoc
+// @Summary      Активный звонок текущего агента
+// @Description  Username из JWT = SIP номер агента. Смотрит AgentStore/CallStore (данные из AMI, без БД)
+// @Tags         Actions
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200 {object} map[string]any
+// @Router       /api/actions/my-call [get]
+func (h *ActionsHandler) GetMyActiveCall(w http.ResponseWriter, r *http.Request) {
+	user := auth.FromContext(r.Context())
+	// Username в JWT — это SIP номер агента (например "1001")
+	sipUsername := user.Username
+
+	w.Header().Set("Content-Type", "application/json")
+
+	agent, ok := h.Agents.GetAgents(user.TenantID)[sipUsername]
+	if !ok || (agent.Status != "in-call" && agent.Status != "ringing") {
+		w.Write([]byte(`{"active":false}`))
+		return
+	}
+
+	callFrom := ""
+	if agent.CallID != "" {
+		if call, ok := h.Calls.GetCalls(user.TenantID)[agent.CallID]; ok {
+			callFrom = call.From
+			if callFrom == sipUsername {
+				callFrom = call.To
+			}
+		}
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"active":   true,
+		"callFrom": callFrom,
+		"callId":   agent.CallID,
+		"status":   agent.Status,
+	})
 }

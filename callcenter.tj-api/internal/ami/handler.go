@@ -95,32 +95,20 @@ func (h *Handler) HandleEvent(ev map[string]string) {
 	case "QueueCallerLeave":
 		queue := ev["Queue"]
 		uniqueID := ev["Uniqueid"]
+		reason := ev["Reason"]
 		
 		h.Queues.Update(tenantID, queue, func(q *monitor.QueueStats) {
 			q.Waiting--
 		})
 		
-		// Удаляем звонок из списка если он не был отвечен
-		// (если отвечен, он уже привязан к агенту через DialBegin/BridgeEnter)
-		calls := h.Calls.GetCalls(tenantID)
-		if call, exists := calls[uniqueID]; exists {
-			// Проверяем не обрабатывается ли звонок агентом
-			agents := h.Agents.GetAgents(tenantID)
-			isHandled := false
-			for _, agent := range agents {
-				if agent.CallID == uniqueID {
-					isHandled = true
-					break
-				}
-			}
-			
-			// Удаляем только если не обрабатывается
-			if !isHandled {
-				h.Calls.RemoveCall(tenantID, uniqueID)
-				log.Printf("📴 Caller left queue %s before being answered (uniqueID: %s)", queue, uniqueID)
-			} else {
-				log.Printf("ℹ️ Caller left queue %s but is being handled by agent (call: %s)", queue, call.From)
-			}
+		log.Printf("📤 QueueCallerLeave: uniqueID=%s, queue=%s, reason=%s", uniqueID, queue, reason)
+		
+		// НЕ удаляем звонок здесь - это сделает Hangup
+		// Просто логируем для отладки
+		if reason == "3" {
+			log.Printf("✅ Call was answered: %s", uniqueID)
+		} else {
+			log.Printf("⚠️ Call left queue without answer (reason=%s): %s", reason, uniqueID)
 		}
 
 	case "QueueMemberPause":
@@ -153,13 +141,30 @@ func (h *Handler) HandleEvent(ev map[string]string) {
 		log.Printf("📞 DialBegin/Newstate: callID=%s, agent=%s, from=%s, to=%s, channel=%s", 
 			callID, agent, ev["CallerIDNum"], ev["ConnectedLineNum"], ev["Channel"])
 
-		h.Calls.UpdateCall(tenantID, monitor.Call{
+		// Получаем существующий звонок
+		calls := h.Calls.GetCalls(tenantID)
+		existingCall, exists := calls[callID]
+		
+		// Создаём обновлённый звонок
+		updatedCall := monitor.Call{
 			ID:      callID,
 			From:    ev["CallerIDNum"],
 			To:      ev["ConnectedLineNum"],
 			Channel: ev["Channel"],
-		})
+		}
+		
+		// ВАЖНО: Если звонок уже существует — сохраняем оригинальные From/To
+		// (они были установлены из QueueCallerJoin и содержат реальный номер звонящего и имя очереди)
+		if exists && existingCall.From != "" {
+			updatedCall.From = existingCall.From
+			log.Printf("✅ Preserving original From: %s", existingCall.From)
+		}
+		if exists && existingCall.To != "" {
+			updatedCall.To = existingCall.To
+			log.Printf("✅ Preserving original To (queue): %s", existingCall.To)
+		}
 
+		h.Calls.UpdateCall(tenantID, updatedCall)
 		h.setAgentState(tenantID, agent, "ringing", callID)
 
 	case "BridgeEnter":
@@ -176,15 +181,30 @@ func (h *Handler) HandleEvent(ev map[string]string) {
 		log.Printf("🔗 BridgeEnter: callID=%s, agent=%s, from=%s, to=%s, channel=%s, tenantID=%d", 
 			callID, agent, ev["CallerIDNum"], ev["ConnectedLineNum"], ev["Channel"], tenantID)
 
+		// Получаем существующий звонок
+		calls := h.Calls.GetCalls(tenantID)
+		existingCall, exists := calls[callID]
+		
 		call := monitor.Call{
 			ID:      callID,
 			From:    ev["CallerIDNum"],
 			To:      ev["ConnectedLineNum"],
 			Channel: ev["Channel"],
 		}
+		
+		// ВАЖНО: Если звонок уже существует — сохраняем оригинальные From/To
+		// (они были установлены из QueueCallerJoin и содержат реальный номер звонящего и имя очереди)
+		if exists && existingCall.From != "" {
+			call.From = existingCall.From
+			log.Printf("✅ BridgeEnter: Preserving original From: %s", existingCall.From)
+		}
+		if exists && existingCall.To != "" {
+			call.To = existingCall.To
+			log.Printf("✅ BridgeEnter: Preserving original To (queue): %s", existingCall.To)
+		}
 
 		h.Calls.UpdateCall(tenantID, call)
-		log.Printf("💾 Call saved to tenantID=%d, callID=%s, channel=%s", tenantID, callID, call.Channel)
+		log.Printf("💾 Call saved to tenantID=%d, callID=%s, channel=%s, to=%s", tenantID, callID, call.Channel, call.To)
 
 		otherExt := ev["ConnectedLineNum"]
 		if otherExt == agent {
@@ -200,11 +220,12 @@ func (h *Handler) HandleEvent(ev map[string]string) {
 
 	case "Hangup":
 		callID := ev["Linkedid"]
+		channel := ev["Channel"]
+		
 		if callID == "" {
 			return
 		}
 
-		channel := ev["Channel"]
 		log.Printf("📴 AMI Hangup: callID=%s, channel=%s, tenantID=%d", callID, channel, tenantID)
 
 		calls := h.Calls.GetCalls(tenantID)
@@ -215,6 +236,76 @@ func (h *Handler) HandleEvent(ev map[string]string) {
 			return
 		}
 
+		// Проверяем: это звонок в ожидании или обрабатываемый агентом?
+		agents := h.Agents.GetAgents(tenantID)
+		var handlingAgent *monitor.AgentState
+		for _, agent := range agents {
+			if agent.CallID == callID {
+				a := agent // Копируем
+				handlingAgent = &a
+				break
+			}
+		}
+
+		// Если звонок не привязан ни к одному агенту
+		if handlingAgent == nil {
+			// Проверяем: это агентский канал (PJSIP/XXXX-...) ?
+			if strings.HasPrefix(channel, "PJSIP/") {
+				// Агент повесил трубку через SIP-телефон, но не был отслежен в store
+				log.Printf("🗑️ Agent SIP channel hung up (agent not tracked in store), removing call: callID=%s, channel=%s", callID, channel)
+				h.Calls.RemoveCall(tenantID, callID)
+				// Дополнительно сбрасываем агента по имени из канала
+				agentName := extractAgent(channel)
+				if agentName != "" {
+					agents2 := h.Agents.GetAgents(tenantID)
+					if a, ok := agents2[agentName]; ok {
+						h.Agents.UpdateAgent(tenantID, monitor.AgentState{
+							Name:      a.Name,
+							Status:    "idle",
+							CallID:    "",
+							IPAddress: a.IPAddress,
+						})
+					}
+				}
+				return
+			}
+			// Это звонок в очереди который завершился (абонент повесил трубку)
+			log.Printf("🗑️ Removing waiting call (caller hung up): callID=%s", callID)
+			h.Calls.RemoveCall(tenantID, callID)
+			return
+		}
+
+		// Звонок обрабатывается агентом
+		// Проверяем: завершился ли канал агента?
+		agentChannel := fmt.Sprintf("PJSIP/%s-", handlingAgent.Name)
+		isAgentChannel := channel != "" && (channel == agentChannel || 
+			strings.HasPrefix(channel, agentChannel))
+
+		log.Printf("🔍 Hangup analysis: channel=%s, agentChannel=%s, isAgent=%v", 
+			channel, agentChannel, isAgentChannel)
+
+		// Если завершился канал агента - ВСЕГДА удаляем звонок и сбрасываем агента
+		if isAgentChannel {
+			log.Printf("🗑️ Agent channel finished, removing call and resetting agent: callID=%s, agent=%s", 
+				callID, handlingAgent.Name)
+			
+			h.Agents.UpdateAgent(tenantID, monitor.AgentState{
+				Name:      handlingAgent.Name,
+				Status:    "idle",
+				CallID:    "",
+				IPAddress: handlingAgent.IPAddress,
+			})
+			
+			h.Calls.RemoveCall(tenantID, callID)
+			
+			// 🧹 ДОПОЛНИТЕЛЬНАЯ ОЧИСТКА: Проверяем всех остальных агентов
+			// (на случай если несколько агентов имеют один callId - баг)
+			h.cleanupAgentsWithCall(tenantID, callID)
+			
+			return
+		}
+
+		// Это канал клиента - используем логику с подсчётом каналов
 		remainingChannels := []string{}
 		for _, ch := range call.Channels {
 			if ch != channel {
@@ -234,21 +325,18 @@ func (h *Handler) HandleEvent(ev map[string]string) {
 		} else {
 			log.Printf("🗑️ All channels finished, removing call: callID=%s", callID)
 			
-			// Сбрасываем всех агентов, сохраняя их IP адрес
-			agents := h.Agents.GetAgents(tenantID)
-			for _, a := range agents {
-				if a.CallID == callID {
-					log.Printf("🔄 Resetting agent %s to idle (was %s)", a.Name, a.Status)
-					h.Agents.UpdateAgent(tenantID, monitor.AgentState{
-						Name:      a.Name,
-						Status:    "idle",
-						CallID:    "",
-						IPAddress: a.IPAddress, // Сохраняем IP!
-					})
-				}
-			}
+			// Сбрасываем агента
+			h.Agents.UpdateAgent(tenantID, monitor.AgentState{
+				Name:      handlingAgent.Name,
+				Status:    "idle",
+				CallID:    "",
+				IPAddress: handlingAgent.IPAddress,
+			})
 			
 			h.Calls.RemoveCall(tenantID, callID)
+			
+			// 🧹 ДОПОЛНИТЕЛЬНАЯ ОЧИСТКА: Проверяем всех остальных агентов
+			h.cleanupAgentsWithCall(tenantID, callID)
 		}
 
 	case "PeerStatus":
@@ -308,36 +396,76 @@ func (h *Handler) HandleEvent(ev map[string]string) {
 		h.activeChannels = make(map[string]bool) // Сброс для следующей итерации
 		h.channelsMu.Unlock()
 		
-		// Проходим по всем звонкам всех tenants
+		log.Printf("🔍 CoreShowChannelsComplete: found %d active channels", len(activeChannels))
+		
+		// Проходим по всем tenants
 		for checkTenantID := 110001; checkTenantID < 999999; checkTenantID++ {
 			calls := h.Calls.GetCalls(checkTenantID)
-			if len(calls) == 0 {
+			agents := h.Agents.GetAgents(checkTenantID)
+			
+			if len(calls) == 0 && len(agents) == 0 {
 				continue
 			}
 			
-			for callID := range calls {
-				// Если звонка нет в списке активных каналов - удаляем
-				if !activeChannels[callID] {
-					log.Printf("🧹 Cleaning up stale call: callID=%s, tenant=%d (not in active channels)", callID, checkTenantID)
-					
-					// Сбрасываем агентов с этим звонком
-					agents := h.Agents.GetAgents(checkTenantID)
-					for _, a := range agents {
-						if a.CallID == callID {
-							log.Printf("🔄 Resetting agent %s to idle (stale call cleanup)", a.Name)
-							h.Agents.UpdateAgent(checkTenantID, monitor.AgentState{
-								Name:      a.Name,
-								Status:    "idle",
-								CallID:    "",
-								IPAddress: a.IPAddress,
-							})
-						}
+			// 🧹 ПРОВЕРКА 1: Очищаем агентов у которых звонка не существует
+			for _, a := range agents {
+				if a.CallID != "" {
+					_, callExists := calls[a.CallID]
+					if !callExists {
+						log.Printf("🧹 Agent %s has non-existent call %s, resetting to idle", 
+							a.Name, a.CallID)
+						h.Agents.UpdateAgent(checkTenantID, monitor.AgentState{
+							Name:      a.Name,
+							Status:    "idle",
+							CallID:    "",
+							IPAddress: a.IPAddress,
+						})
 					}
+				}
+			}
+			
+			// 🧹 ПРОВЕРКА 2: Очищаем звонки у которых нет активных каналов
+			for callID := range calls {
+				// Проверяем: обрабатывается ли звонок агентом?
+				isBeingHandled := false
+				for _, a := range agents {
+					if a.CallID == callID {
+						isBeingHandled = true
+						break
+					}
+				}
+				
+				// Если нет активного канала — удаляем звонок в любом случае
+				if !activeChannels[callID] {
+					if isBeingHandled {
+						log.Printf("🧹 Cleaning up stale call: callID=%s, tenant=%d (handled by agent but no active channel)", callID, checkTenantID)
+					} else {
+						log.Printf("🧹 Cleaning up stale waiting call: callID=%s, tenant=%d (no active channel)", callID, checkTenantID)
+					}
+					
+					// Сбрасываем всех агентов с этим звонком
+					h.cleanupAgentsWithCall(checkTenantID, callID)
 					
 					// Удаляем звонок
 					h.Calls.RemoveCall(checkTenantID, callID)
 				}
 			}
+		}
+	}
+}
+
+// cleanupAgentsWithCall сбрасывает всех агентов у которых есть данный callId
+func (h *Handler) cleanupAgentsWithCall(tenantID int, callID string) {
+	agents := h.Agents.GetAgents(tenantID)
+	for _, a := range agents {
+		if a.CallID == callID {
+			log.Printf("🧹 Cleanup: Resetting agent %s (had stale call %s)", a.Name, callID)
+			h.Agents.UpdateAgent(tenantID, monitor.AgentState{
+				Name:      a.Name,
+				Status:    "idle",
+				CallID:    "",
+				IPAddress: a.IPAddress,
+			})
 		}
 	}
 }

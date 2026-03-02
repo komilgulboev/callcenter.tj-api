@@ -55,11 +55,41 @@ func Monitor(
 		log.Printf("🟢 WS connected | tenant=%d", tenantID)
 
 		writeSnapshot := func() error {
+			agents := agentStore.GetAgents(tenantID)
+			calls := callStore.GetCalls(tenantID)
+			queues := queueStore.Snapshot(tenantID)
+			
+			// 🧹 ОЧИСТКА: Удаляем агентов с несуществующими звонками
+			cleanedAgents := make(map[string]monitor.AgentState)
+			for name, agent := range agents {
+				// Если у агента есть callId, проверяем существует ли звонок
+				if agent.CallID != "" {
+					_, callExists := calls[agent.CallID]
+					if !callExists {
+						log.Printf("🧹 Cleaning stale callId from agent %s (call %s not found)", 
+							name, agent.CallID)
+						
+						// Сбрасываем агента
+						cleanedAgent := agent
+						cleanedAgent.Status = "idle"
+						cleanedAgent.CallID = ""
+						cleanedAgents[name] = cleanedAgent
+						
+						// Обновляем в Store
+						agentStore.UpdateAgent(tenantID, cleanedAgent)
+						continue
+					}
+				}
+				
+				// Агент валиден или не имеет звонка
+				cleanedAgents[name] = agent
+			}
+			
 			snap := snapshot{
 				Type:   "snapshot",
-				Agents: agentStore.GetAgents(tenantID),
-				Calls:  callStore.GetCalls(tenantID),
-				Queues: queueStore.Snapshot(tenantID),
+				Agents: cleanedAgents,
+				Calls:  calls,
+				Queues: queues,
 			}
 			
 			log.Printf("📡 WS Snapshot | tenant=%d | agents=%d | calls=%d | queues=%d", 
@@ -88,6 +118,11 @@ func Monitor(
 		queueStore.Subscribe(tenantID, queueCh)
 		defer queueStore.Unsubscribe(tenantID, queueCh)
 
+		// ✅ НОВОЕ: Подписка на звонки!
+		callCh := make(chan struct{}, 16)
+		callStore.Subscribe(tenantID, callCh)
+		defer callStore.Unsubscribe(tenantID, callCh)
+
 		heartbeat := time.NewTicker(25 * time.Second)
 		defer heartbeat.Stop()
 
@@ -100,6 +135,12 @@ func Monitor(
 				}
 
 			case <-queueCh:
+				if err := writeSnapshot(); err != nil {
+					return
+				}
+
+			// ✅ НОВОЕ: Обрабатываем изменения звонков!
+			case <-callCh:
 				if err := writeSnapshot(); err != nil {
 					return
 				}
