@@ -1,36 +1,25 @@
 basePath: /
 definitions:
-  auth.LoginRequest:
+  internal_auth.LoginRequest:
     properties:
       password:
         type: string
       username:
         type: string
     type: object
-  auth.LoginResponse:
+  internal_auth.LoginResponse:
     properties:
       token:
         type: string
     type: object
-  handlers.AddTicketUpdateRequest:
-    properties:
-      callFrom:
-        type: string
-      callUniqueid:
-        type: string
-      description:
-        type: string
-      statusId:
-        type: integer
-    type: object
-  handlers.AssignCatalogRequest:
+  internal_handlers.AssignCatalogRequest:
     properties:
       catalogId:
         type: integer
       userId:
         type: integer
     type: object
-  handlers.CatalogRequest:
+  internal_handlers.CatalogRequest:
     properties:
       active:
         type: boolean
@@ -39,7 +28,7 @@ definitions:
       name:
         type: string
     type: object
-  handlers.CatalogResponse:
+  internal_handlers.CatalogResponse:
     properties:
       active:
         type: boolean
@@ -54,7 +43,7 @@ definitions:
       tenantId:
         type: integer
     type: object
-  handlers.CategoryRequest:
+  internal_handlers.CategoryRequest:
     properties:
       active:
         type: boolean
@@ -65,7 +54,7 @@ definitions:
       sortOrder:
         type: integer
     type: object
-  handlers.CategoryResponse:
+  internal_handlers.CategoryResponse:
     properties:
       active:
         type: boolean
@@ -82,30 +71,7 @@ definitions:
       tenantId:
         type: integer
     type: object
-  handlers.ChangeStatusRequest:
-    properties:
-      statusId:
-        type: integer
-    type: object
-  handlers.CreateTicketRequest:
-    properties:
-      callFrom:
-        type: string
-      callUniqueid:
-        type: string
-      categoryId:
-        type: integer
-      description:
-        type: string
-      subject:
-        type: string
-    type: object
-  handlers.CreateTicketResponse:
-    properties:
-      id:
-        type: integer
-    type: object
-  handlers.StatusRequest:
+  internal_handlers.StatusRequest:
     properties:
       code:
         type: string
@@ -118,7 +84,7 @@ definitions:
       sortOrder:
         type: integer
     type: object
-  handlers.StatusResponse:
+  internal_handlers.StatusResponse:
     properties:
       code:
         type: string
@@ -137,38 +103,7 @@ definitions:
       tenantId:
         type: integer
     type: object
-  handlers.TicketItem:
-    properties:
-      callFrom:
-        type: string
-      callUniqueid:
-        type: string
-      categoryId:
-        type: integer
-      categoryName:
-        type: string
-      createdAt:
-        type: string
-      createdBy:
-        type: integer
-      createdByName:
-        type: string
-      description:
-        type: string
-      id:
-        type: integer
-      statusCode:
-        type: string
-      statusColor:
-        type: string
-      statusId:
-        type: integer
-      subject:
-        type: string
-      updatedAt:
-        type: string
-    type: object
-  handlers.UserCatalogResponse:
+  internal_handlers.UserCatalogResponse:
     properties:
       catalogId:
         type: integer
@@ -183,7 +118,7 @@ definitions:
       username:
         type: string
     type: object
-  sip.CredentialsResponse:
+  internal_sip.CredentialsResponse:
     properties:
       domain:
         type: string
@@ -246,6 +181,23 @@ paths:
       summary: Hangup call
       tags:
       - Actions
+  /api/actions/my-call:
+    get:
+      description: Username из JWT = SIP номер агента. Смотрит AgentStore/CallStore
+        (данные из AMI, без БД)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Активный звонок текущего агента
+      tags:
+      - Actions
   /api/auth/login:
     post:
       consumes:
@@ -257,14 +209,14 @@ paths:
         name: credentials
         required: true
         schema:
-          $ref: '#/definitions/auth.LoginRequest'
+          $ref: '#/definitions/internal_auth.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/auth.LoginResponse'
+            $ref: '#/definitions/internal_auth.LoginResponse'
         "400":
           description: invalid request
           schema:
@@ -291,7 +243,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/handlers.UserCatalogResponse'
+              $ref: '#/definitions/internal_handlers.UserCatalogResponse'
             type: array
         "401":
           description: unauthorized
@@ -316,7 +268,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handlers.AssignCatalogRequest'
+          $ref: '#/definitions/internal_handlers.AssignCatalogRequest'
       produces:
       - application/json
       responses:
@@ -380,7 +332,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/handlers.CatalogResponse'
+              $ref: '#/definitions/internal_handlers.CatalogResponse'
             type: array
         "401":
           description: unauthorized
@@ -405,14 +357,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handlers.CatalogRequest'
+          $ref: '#/definitions/internal_handlers.CatalogRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/handlers.CatalogResponse'
+            $ref: '#/definitions/internal_handlers.CatalogResponse'
         "400":
           description: invalid request
           schema:
@@ -503,14 +455,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handlers.CatalogRequest'
+          $ref: '#/definitions/internal_handlers.CatalogRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.CatalogResponse'
+            $ref: '#/definitions/internal_handlers.CatalogResponse'
         "400":
           description: invalid request
           schema:
@@ -548,7 +500,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/handlers.CategoryResponse'
+              $ref: '#/definitions/internal_handlers.CategoryResponse'
             type: array
         "400":
           description: catalogId required
@@ -577,14 +529,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handlers.CategoryRequest'
+          $ref: '#/definitions/internal_handlers.CategoryRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/handlers.CategoryResponse'
+            $ref: '#/definitions/internal_handlers.CategoryResponse'
         "400":
           description: invalid request
           schema:
@@ -651,14 +603,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handlers.CategoryRequest'
+          $ref: '#/definitions/internal_handlers.CategoryRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.CategoryResponse'
+            $ref: '#/definitions/internal_handlers.CategoryResponse'
         "400":
           description: invalid request
           schema:
@@ -680,29 +632,6 @@ paths:
       summary: Обновить категорию
       tags:
       - CRM Categories
-  /api/crm/my-catalog:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "404":
-          description: catalog not assigned
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Получить каталог текущего пользователя
-      tags:
-      - CRM Tickets
   /api/crm/statuses:
     get:
       description: Возвращает все статусы тенанта упорядоченные по sort_order
@@ -713,7 +642,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/handlers.StatusResponse'
+              $ref: '#/definitions/internal_handlers.StatusResponse'
             type: array
         "401":
           description: unauthorized
@@ -734,14 +663,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handlers.StatusRequest'
+          $ref: '#/definitions/internal_handlers.StatusRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/handlers.StatusResponse'
+            $ref: '#/definitions/internal_handlers.StatusResponse'
         "400":
           description: code is required
           schema:
@@ -807,14 +736,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handlers.StatusRequest'
+          $ref: '#/definitions/internal_handlers.StatusRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.StatusResponse'
+            $ref: '#/definitions/internal_handlers.StatusResponse'
         "400":
           description: invalid request
           schema:
@@ -836,190 +765,6 @@ paths:
       summary: Обновить статус
       tags:
       - CRM Statuses
-  /api/crm/tickets:
-    get:
-      parameters:
-      - description: Фильтр по статусу
-        in: query
-        name: statusId
-        type: integer
-      - description: Поиск по теме, номеру
-        in: query
-        name: search
-        type: string
-      - description: Лимит (по умолчанию 50)
-        in: query
-        name: limit
-        type: integer
-      - description: Смещение (по умолчанию 0)
-        in: query
-        name: offset
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/handlers.TicketItem'
-            type: array
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "500":
-          description: internal error
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Список заявок
-      tags:
-      - CRM Tickets
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Данные заявки
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.CreateTicketRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/handlers.CreateTicketResponse'
-        "400":
-          description: invalid request
-          schema:
-            type: string
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "500":
-          description: internal error
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Создать заявку
-      tags:
-      - CRM Tickets
-  /api/crm/tickets/{id}:
-    get:
-      parameters:
-      - description: ID заявки
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "404":
-          description: not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Получить заявку
-      tags:
-      - CRM Tickets
-  /api/crm/tickets/{id}/status:
-    patch:
-      consumes:
-      - application/json
-      parameters:
-      - description: ID заявки
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Новый статус
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.ChangeStatusRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: ok
-          schema:
-            type: string
-        "400":
-          description: invalid request
-          schema:
-            type: string
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "404":
-          description: not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Изменить статус заявки
-      tags:
-      - CRM Tickets
-  /api/crm/tickets/{id}/updates:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: ID заявки
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Данные обновления
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.AddTicketUpdateRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: ok
-          schema:
-            type: string
-        "400":
-          description: invalid request
-          schema:
-            type: string
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "404":
-          description: ticket not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Добавить обновление к заявке
-      tags:
-      - CRM Tickets
   /api/sip/credentials:
     get:
       description: Returns SIP credentials for authenticated user (webphone)
@@ -1029,7 +774,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/sip.CredentialsResponse'
+            $ref: '#/definitions/internal_sip.CredentialsResponse'
         "401":
           description: unauthorized
           schema:
@@ -1043,6 +788,21 @@ paths:
       summary: Get SIP credentials
       tags:
       - SIP
+  /api/staff:
+    get:
+      responses: {}
+      summary: Список сотрудников тенанта
+  /api/staff/{id}/avatar:
+    delete:
+      responses: {}
+      summary: Удалить фото сотрудника
+    post:
+      responses: {}
+      summary: Загрузить фото сотрудника
+  /api/staff/{id}/profile:
+    put:
+      responses: {}
+      summary: Обновить профиль сотрудника
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token

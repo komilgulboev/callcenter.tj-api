@@ -103,6 +103,22 @@ func main() {
 		DB: pool,
 	}
 
+	cdrHandler := &handlers.CDRHandler{
+		DB:           pool,
+	}
+
+	recordingHandler := &handlers.RecordingHandler{
+		DB:              pool,
+		AsteriskBaseURL: cfg.Asterisk.RecordingURL,
+		SignSecret:   cfg.JWT.Secret, // используем тот же секрет
+	}
+
+	staffHandler := &handlers.StaffHandler{
+		DB:         pool,
+		UploadDir:  "./uploads",
+		PublicBase: cfg.HTTP.PublicBase,
+	}
+
 
 	// =========================
 	// ROUTER
@@ -111,11 +127,7 @@ func main() {
 
 	// CORS — должен быть первым
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{
-			"http://localhost:3000",
-			"http://localhost:5173",
-			"http://localhost:8080",
-		},
+		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{
 			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
 		},
@@ -123,11 +135,11 @@ func main() {
 			"Accept",
 			"Authorization",
 			"Content-Type",
+			"X-Requested-With",
+			"multipart/form-data",
 		},
-		ExposedHeaders: []string{
-			"Authorization",
-		},
-		AllowCredentials: true,
+		ExposedHeaders:   []string{"Authorization"},
+		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 
@@ -175,6 +187,20 @@ func main() {
 		r.Post("/api/actions/hangup", actionsHandler.Hangup)
 		r.Get("/api/actions/my-call",   actionsHandler.GetMyActiveCall)
 
+		// ── Отчёты ───────────────────────────────────────────
+		r.Get("/api/reports/calls", cdrHandler.GetCDR)
+
+		// ── Записи звонков (защищённые) ───────────────────────
+		r.Get("/api/recordings/{uniqueid}",       recordingHandler.Stream)
+		r.Get("/api/recordings/{uniqueid}/link",  recordingHandler.GetSignedLink)
+
+		// ── Сотрудники ────────────────────────────────────
+		r.Get("/api/staff",                  staffHandler.GetStaff)
+		r.Put("/api/staff/{id}/profile",     staffHandler.UpdateProfile)
+		r.Post("/api/staff/{id}/avatar",     staffHandler.UploadAvatar)
+		r.Delete("/api/staff/{id}/avatar",   staffHandler.DeleteAvatar)
+		r.Delete("/api/staff/{id}",           staffHandler.DeleteStaff)
+
 		// ── CRM: Тикеты ────────────────────────────────
 		r.Get("/api/crm/tickets",                    crmHandler.GetTickets)
 		r.Post("/api/crm/tickets",                   crmHandler.CreateTicket)
@@ -209,6 +235,14 @@ func main() {
 		r.Put("/api/crm/statuses/{id}",    crmCatalogHandler.UpdateStatus)
 		r.Delete("/api/crm/statuses/{id}", crmCatalogHandler.DeleteStatus)
 	})
+
+	// =========================
+	// STATIC: аватары и записи звонков
+	// =========================
+	// Подписанные временные ссылки на записи (без JWT, но с HMAC подписью)
+	r.Get("/api/recordings/{uniqueid}/play", recordingHandler.PlaySigned)
+
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 
 	// =========================
 	// SWAGGER

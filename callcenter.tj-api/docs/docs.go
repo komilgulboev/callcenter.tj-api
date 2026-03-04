@@ -84,6 +84,32 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/actions/my-call": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Username из JWT = SIP номер агента. Смотрит AgentStore/CallStore (данные из AMI, без БД)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Actions"
+                ],
+                "summary": "Активный звонок текущего агента",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/auth/login": {
             "post": {
                 "description": "Authenticate user and return JWT token",
@@ -104,7 +130,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/auth.LoginRequest"
+                            "$ref": "#/definitions/internal_auth.LoginRequest"
                         }
                     }
                 ],
@@ -112,7 +138,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/auth.LoginResponse"
+                            "$ref": "#/definitions/internal_auth.LoginResponse"
                         }
                     },
                     "400": {
@@ -157,7 +183,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/handlers.UserCatalogResponse"
+                                "$ref": "#/definitions/internal_handlers.UserCatalogResponse"
                             }
                         }
                     },
@@ -199,7 +225,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.AssignCatalogRequest"
+                            "$ref": "#/definitions/internal_handlers.AssignCatalogRequest"
                         }
                     }
                 ],
@@ -298,7 +324,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/handlers.CatalogResponse"
+                                "$ref": "#/definitions/internal_handlers.CatalogResponse"
                             }
                         }
                     },
@@ -340,7 +366,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CatalogRequest"
+                            "$ref": "#/definitions/internal_handlers.CatalogRequest"
                         }
                     }
                 ],
@@ -348,7 +374,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/handlers.CatalogResponse"
+                            "$ref": "#/definitions/internal_handlers.CatalogResponse"
                         }
                     },
                     "400": {
@@ -455,7 +481,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CatalogRequest"
+                            "$ref": "#/definitions/internal_handlers.CatalogRequest"
                         }
                     }
                 ],
@@ -463,7 +489,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handlers.CatalogResponse"
+                            "$ref": "#/definitions/internal_handlers.CatalogResponse"
                         }
                     },
                     "400": {
@@ -561,7 +587,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/handlers.CategoryResponse"
+                                "$ref": "#/definitions/internal_handlers.CategoryResponse"
                             }
                         }
                     },
@@ -609,7 +635,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CategoryRequest"
+                            "$ref": "#/definitions/internal_handlers.CategoryRequest"
                         }
                     }
                 ],
@@ -617,7 +643,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/handlers.CategoryResponse"
+                            "$ref": "#/definitions/internal_handlers.CategoryResponse"
                         }
                     },
                     "400": {
@@ -685,7 +711,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CategoryRequest"
+                            "$ref": "#/definitions/internal_handlers.CategoryRequest"
                         }
                     }
                 ],
@@ -693,7 +719,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handlers.CategoryResponse"
+                            "$ref": "#/definitions/internal_handlers.CategoryResponse"
                         }
                     },
                     "400": {
@@ -761,43 +787,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/crm/my-catalog": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CRM Tickets"
-                ],
-                "summary": "Получить каталог текущего пользователя",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "catalog not assigned",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/api/crm/statuses": {
             "get": {
                 "security": [
@@ -819,7 +808,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/handlers.StatusResponse"
+                                "$ref": "#/definitions/internal_handlers.StatusResponse"
                             }
                         }
                     },
@@ -855,7 +844,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.StatusRequest"
+                            "$ref": "#/definitions/internal_handlers.StatusRequest"
                         }
                     }
                 ],
@@ -863,7 +852,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/handlers.StatusResponse"
+                            "$ref": "#/definitions/internal_handlers.StatusResponse"
                         }
                     },
                     "400": {
@@ -925,7 +914,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.StatusRequest"
+                            "$ref": "#/definitions/internal_handlers.StatusRequest"
                         }
                     }
                 ],
@@ -933,7 +922,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handlers.StatusResponse"
+                            "$ref": "#/definitions/internal_handlers.StatusResponse"
                         }
                     },
                     "400": {
@@ -1007,297 +996,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/crm/tickets": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CRM Tickets"
-                ],
-                "summary": "Список заявок",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Фильтр по статусу",
-                        "name": "statusId",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Поиск по теме, номеру",
-                        "name": "search",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Лимит (по умолчанию 50)",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Смещение (по умолчанию 0)",
-                        "name": "offset",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.TicketItem"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CRM Tickets"
-                ],
-                "summary": "Создать заявку",
-                "parameters": [
-                    {
-                        "description": "Данные заявки",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.CreateTicketRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.CreateTicketResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "invalid request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/crm/tickets/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CRM Tickets"
-                ],
-                "summary": "Получить заявку",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "ID заявки",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "not found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/crm/tickets/{id}/status": {
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CRM Tickets"
-                ],
-                "summary": "Изменить статус заявки",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "ID заявки",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Новый статус",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ChangeStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "ok",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "400": {
-                        "description": "invalid request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "not found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/crm/tickets/{id}/updates": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CRM Tickets"
-                ],
-                "summary": "Добавить обновление к заявке",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "ID заявки",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Данные обновления",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.AddTicketUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "ok",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "400": {
-                        "description": "invalid request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "ticket not found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/api/sip/credentials": {
             "get": {
                 "security": [
@@ -1317,7 +1015,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/sip.CredentialsResponse"
+                            "$ref": "#/definitions/internal_sip.CredentialsResponse"
                         }
                     },
                     "401": {
@@ -1334,10 +1032,32 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/api/staff": {
+            "get": {
+                "summary": "Список сотрудников тенанта",
+                "responses": {}
+            }
+        },
+        "/api/staff/{id}/avatar": {
+            "post": {
+                "summary": "Загрузить фото сотрудника",
+                "responses": {}
+            },
+            "delete": {
+                "summary": "Удалить фото сотрудника",
+                "responses": {}
+            }
+        },
+        "/api/staff/{id}/profile": {
+            "put": {
+                "summary": "Обновить профиль сотрудника",
+                "responses": {}
+            }
         }
     },
     "definitions": {
-        "auth.LoginRequest": {
+        "internal_auth.LoginRequest": {
             "type": "object",
             "properties": {
                 "password": {
@@ -1348,7 +1068,7 @@ const docTemplate = `{
                 }
             }
         },
-        "auth.LoginResponse": {
+        "internal_auth.LoginResponse": {
             "type": "object",
             "properties": {
                 "token": {
@@ -1356,24 +1076,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.AddTicketUpdateRequest": {
-            "type": "object",
-            "properties": {
-                "callFrom": {
-                    "type": "string"
-                },
-                "callUniqueid": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "statusId": {
-                    "type": "integer"
-                }
-            }
-        },
-        "handlers.AssignCatalogRequest": {
+        "internal_handlers.AssignCatalogRequest": {
             "type": "object",
             "properties": {
                 "catalogId": {
@@ -1384,7 +1087,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.CatalogRequest": {
+        "internal_handlers.CatalogRequest": {
             "type": "object",
             "properties": {
                 "active": {
@@ -1398,7 +1101,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.CatalogResponse": {
+        "internal_handlers.CatalogResponse": {
             "type": "object",
             "properties": {
                 "active": {
@@ -1421,7 +1124,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.CategoryRequest": {
+        "internal_handlers.CategoryRequest": {
             "type": "object",
             "properties": {
                 "active": {
@@ -1438,7 +1141,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.CategoryResponse": {
+        "internal_handlers.CategoryResponse": {
             "type": "object",
             "properties": {
                 "active": {
@@ -1464,43 +1167,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.ChangeStatusRequest": {
-            "type": "object",
-            "properties": {
-                "statusId": {
-                    "type": "integer"
-                }
-            }
-        },
-        "handlers.CreateTicketRequest": {
-            "type": "object",
-            "properties": {
-                "callFrom": {
-                    "type": "string"
-                },
-                "callUniqueid": {
-                    "type": "string"
-                },
-                "categoryId": {
-                    "type": "integer"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "subject": {
-                    "type": "string"
-                }
-            }
-        },
-        "handlers.CreateTicketResponse": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "handlers.StatusRequest": {
+        "internal_handlers.StatusRequest": {
             "type": "object",
             "properties": {
                 "code": {
@@ -1520,7 +1187,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.StatusResponse": {
+        "internal_handlers.StatusResponse": {
             "type": "object",
             "properties": {
                 "code": {
@@ -1549,54 +1216,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.TicketItem": {
-            "type": "object",
-            "properties": {
-                "callFrom": {
-                    "type": "string"
-                },
-                "callUniqueid": {
-                    "type": "string"
-                },
-                "categoryId": {
-                    "type": "integer"
-                },
-                "categoryName": {
-                    "type": "string"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
-                "createdBy": {
-                    "type": "integer"
-                },
-                "createdByName": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "statusCode": {
-                    "type": "string"
-                },
-                "statusColor": {
-                    "type": "string"
-                },
-                "statusId": {
-                    "type": "integer"
-                },
-                "subject": {
-                    "type": "string"
-                },
-                "updatedAt": {
-                    "type": "string"
-                }
-            }
-        },
-        "handlers.UserCatalogResponse": {
+        "internal_handlers.UserCatalogResponse": {
             "type": "object",
             "properties": {
                 "catalogId": {
@@ -1619,7 +1239,7 @@ const docTemplate = `{
                 }
             }
         },
-        "sip.CredentialsResponse": {
+        "internal_sip.CredentialsResponse": {
             "type": "object",
             "properties": {
                 "domain": {
