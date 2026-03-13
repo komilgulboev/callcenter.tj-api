@@ -17,6 +17,8 @@ type Config struct {
 type HTTPConfig struct {
 	Addr       string
 	PublicBase string
+	TLSCert    string // путь к cert.pfx (пусто = HTTP)
+	TLSPass    string // пароль от PFX
 }
 
 type DBConfig struct {
@@ -35,7 +37,7 @@ type AMIConfig struct {
 }
 
 type AsteriskConfig struct {
-	RecordingURL string // URL nginx на Asterisk сервере
+	RecordingURL string
 }
 
 func Load() *Config {
@@ -44,6 +46,8 @@ func Load() *Config {
 	// HTTP
 	cfg.HTTP.Addr       = getEnv("HTTP_ADDR", ":8080")
 	cfg.HTTP.PublicBase = getEnv("HTTP_PUBLIC_BASE", "http://localhost:8080")
+	cfg.HTTP.TLSCert    = getEnv("TLS_CERT", "")  // cert.pfx
+	cfg.HTTP.TLSPass    = getEnv("TLS_PASS", "")  // пароль
 
 	// DATABASE
 	cfg.DB.DSN = getEnv("DB_DSN", "postgres://postgres:postgres@172.20.40.2:5432/postgres?sslmode=disable")
@@ -57,7 +61,7 @@ func Load() *Config {
 	cfg.AMI.Username = getEnv("AMI_USER", "asterisk")
 	cfg.AMI.Password = getEnv("AMI_PASS", "asterisk")
 
-	// ASTERISK RECORDINGS (nginx)
+	// ASTERISK RECORDINGS
 	cfg.Asterisk.RecordingURL = getEnv("ASTERISK_RECORDING_URL", "http://172.20.40.3:8090/recordings")
 
 	log.Println("✅ Config loaded")

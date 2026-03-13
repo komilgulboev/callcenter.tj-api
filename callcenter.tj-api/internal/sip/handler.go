@@ -19,10 +19,11 @@ type DB interface {
 }
 
 type CredentialsResponse struct {
-	SipUser     string `json:"sipUser"`
-	SipPassword string `json:"sipPassword"`
-	Domain      string `json:"domain"`
-	WsUrl       string `json:"wsUrl"`
+	SipUser        string `json:"sipUser"`
+	SipPassword    string `json:"sipPassword"`
+	Domain         string `json:"domain"`
+	WsUrl          string `json:"wsUrl"`         // внешний WSS URL (через прокси)
+	WsUrlInternal  string `json:"wsUrlInternal"`  // внутренний WS URL (прямой)
 }
 
 // GetCredentials godoc
@@ -47,7 +48,8 @@ func (h *Handler) GetCredentials(w http.ResponseWriter, r *http.Request) {
 			b.sip_username,
 			pa.password,
 			s.sip_domain,
-			s.ws_url
+			s.ws_url,
+			COALESCE(s.ws_url_internal, '') as ws_url_internal
 		FROM user_sip_bindings b
 		JOIN ast_ps_auths pa
 		  ON pa.username = b.sip_username
@@ -69,6 +71,7 @@ func (h *Handler) GetCredentials(w http.ResponseWriter, r *http.Request) {
 		&resp.SipPassword,
 		&resp.Domain,
 		&resp.WsUrl,
+		&resp.WsUrlInternal,
 	)
 
 	if err != nil {

@@ -1,14 +1,19 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"time"
+
+	"github.com/gorilla/websocket"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	httpSwagger "github.com/swaggo/http-swagger"
+	"software.sslmate.com/src/go-pkcs12"
 
 	"callcentrix/internal/ami"
 	"callcentrix/internal/auth"
@@ -54,10 +59,10 @@ func main() {
 	// =========================
 	// MONITOR STORES
 	// =========================
-	agentStore      := monitor.NewStore()
-	callStore       := monitor.NewCallStore()
-	queueStore      := monitor.NewQueueStore()
-	tenantResolver  := monitor.NewTenantResolver(pool)
+	agentStore     := monitor.NewStore()
+	callStore      := monitor.NewCallStore()
+	queueStore     := monitor.NewQueueStore()
+	tenantResolver := monitor.NewTenantResolver(pool)
 
 	// =========================
 	// AMI
@@ -104,13 +109,13 @@ func main() {
 	}
 
 	cdrHandler := &handlers.CDRHandler{
-		DB:           pool,
+		DB: pool,
 	}
 
 	recordingHandler := &handlers.RecordingHandler{
 		DB:              pool,
 		AsteriskBaseURL: cfg.Asterisk.RecordingURL,
-		SignSecret:   cfg.JWT.Secret, // используем тот же секрет
+		SignSecret:      cfg.JWT.Secret,
 	}
 
 	staffHandler := &handlers.StaffHandler{
@@ -119,13 +124,16 @@ func main() {
 		PublicBase: cfg.HTTP.PublicBase,
 	}
 
+	companiesHandler := &handlers.CompaniesHandler{
+		DB: pool,
+	}
 
 	// =========================
 	// ROUTER
 	// =========================
 	r := chi.NewRouter()
 
-	// CORS — должен быть первым
+	// CORS
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{
@@ -158,6 +166,7 @@ func main() {
 	sipHandler := &sip.Handler{DB: pool}
 
 	r.Post("/api/auth/login", authHandler.Login)
+	r.Post("/api/auth/register", authHandler.Register)
 
 	r.Get("/ws/monitor", ws.Monitor(
 		agentStore,
@@ -172,34 +181,48 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(cfg.JWT.Secret))
 
-		// ── Общее ──────────────────────────────────────
 		r.Get("/api/me", func(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(auth.FromContext(r.Context()))
 		})
 
 		// ── SIP ────────────────────────────────────────
-		r.Get("/api/sip/credentials",  sipHandler.GetCredentials)
+		r.Get("/api/sip/credentials", sipHandler.GetCredentials)
+
 		// ── Агенты ─────────────────────────────────────
 		r.Get("/api/agents/info", agentsInfoHandler.GetAgentsInfo)
 
 		// ── Действия ───────────────────────────────────
 		r.Post("/api/actions/pause",  actionsHandler.TogglePause)
 		r.Post("/api/actions/hangup", actionsHandler.Hangup)
-		r.Get("/api/actions/my-call",   actionsHandler.GetMyActiveCall)
+		r.Get("/api/actions/my-call", actionsHandler.GetMyActiveCall)
 
-		// ── Отчёты ───────────────────────────────────────────
+		// ── Отчёты ─────────────────────────────────────
 		r.Get("/api/reports/calls", cdrHandler.GetCDR)
 
-		// ── Записи звонков (защищённые) ───────────────────────
-		r.Get("/api/recordings/{uniqueid}",       recordingHandler.Stream)
-		r.Get("/api/recordings/{uniqueid}/link",  recordingHandler.GetSignedLink)
+		// ── Записи звонков ─────────────────────────────
+		r.Get("/api/recordings/{uniqueid}",      recordingHandler.Stream)
+		r.Get("/api/recordings/{uniqueid}/link", recordingHandler.GetSignedLink)
 
-		// ── Сотрудники ────────────────────────────────────
-		r.Get("/api/staff",                  staffHandler.GetStaff)
-		r.Put("/api/staff/{id}/profile",     staffHandler.UpdateProfile)
-		r.Post("/api/staff/{id}/avatar",     staffHandler.UploadAvatar)
-		r.Delete("/api/staff/{id}/avatar",   staffHandler.DeleteAvatar)
-		r.Delete("/api/staff/{id}",           staffHandler.DeleteStaff)
+		// ── Сотрудники ─────────────────────────────────
+		r.Get("/api/staff",                staffHandler.GetStaff)
+		r.Put("/api/staff/{id}/profile",   staffHandler.UpdateProfile)
+		r.Post("/api/staff/{id}/avatar",   staffHandler.UploadAvatar)
+		r.Delete("/api/staff/{id}/avatar", staffHandler.DeleteAvatar)
+		r.Delete("/api/staff/{id}",        staffHandler.DeleteStaff)
+
+		// ── Компании ───────────────────────────────────
+		r.Get("/api/tariffs",                      companiesHandler.GetTariffs)
+		r.Get("/api/users/pending",                companiesHandler.GetPendingUsers)
+		r.Patch("/api/users/{id}/activate",        companiesHandler.ActivateUser)
+		r.Delete("/api/users/{id}/reject",         companiesHandler.RejectUser)
+		r.Get("/api/companies",                    companiesHandler.GetCompanies)
+		r.Post("/api/companies",                   companiesHandler.CreateCompany)
+		r.Get("/api/companies/unassigned",         companiesHandler.GetUnassignedUsers)
+		r.Get("/api/companies/{tenantId}/users",   companiesHandler.GetCompanyUsers)
+		r.Post("/api/companies/assign",            companiesHandler.AssignUser)
+		r.Post("/api/companies/unassign",          companiesHandler.UnassignUser)
+		r.Put("/api/companies/{tenantId}",         companiesHandler.UpdateCompany)
+		r.Patch("/api/companies/{tenantId}/status", companiesHandler.ToggleStatus)
 
 		// ── CRM: Тикеты ────────────────────────────────
 		r.Get("/api/crm/tickets",                    crmHandler.GetTickets)
@@ -219,10 +242,10 @@ func main() {
 		r.Delete("/api/crm/catalogs/{id}", crmCatalogHandler.DeleteCatalog)
 
 		// ── CRM: Категории ──────────────────────────────
-		r.Get("/api/crm/categories",          crmCatalogHandler.GetCategories)
-		r.Post("/api/crm/categories",         crmCatalogHandler.CreateCategory)
-		r.Put("/api/crm/categories/{id}",     crmCatalogHandler.UpdateCategory)
-		r.Delete("/api/crm/categories/{id}",  crmCatalogHandler.DeleteCategory)
+		r.Get("/api/crm/categories",         crmCatalogHandler.GetCategories)
+		r.Post("/api/crm/categories",        crmCatalogHandler.CreateCategory)
+		r.Put("/api/crm/categories/{id}",    crmCatalogHandler.UpdateCategory)
+		r.Delete("/api/crm/categories/{id}", crmCatalogHandler.DeleteCategory)
 
 		// ── CRM: Назначения каталогов ───────────────────
 		r.Get("/api/crm/catalog-assignments",             crmCatalogHandler.GetUserCatalogAssignments)
@@ -237,18 +260,104 @@ func main() {
 	})
 
 	// =========================
-	// STATIC: аватары и записи звонков
+	// STATIC: записи (HMAC подпись)
 	// =========================
-	// Подписанные временные ссылки на записи (без JWT, но с HMAC подписью)
 	r.Get("/api/recordings/{uniqueid}/play", recordingHandler.PlaySigned)
 
 	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
+
+	// =========================
+	// WSS ПРОКСИ: SIP через HTTPS
+	// =========================
+	r.Get("/sip", sipWSProxy("ws://172.20.40.3:8088/ws"))
 
 	// =========================
 	// SWAGGER
 	// =========================
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
-	log.Printf("🚀 HTTP server started on %s\n", cfg.HTTP.Addr)
-	log.Fatal(http.ListenAndServe(cfg.HTTP.Addr, r))
+	// =========================
+	// STATIC: фронтенд SPA
+	// =========================
+	r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := http.Dir("./public").Open(r.URL.Path); err == nil {
+			http.FileServer(http.Dir("./public")).ServeHTTP(w, r)
+			return
+		}
+		http.ServeFile(w, r, "./public/index.html")
+	}))
+
+	// =========================
+	// ЗАПУСК СЕРВЕРА
+	// =========================
+	if cfg.HTTP.TLSCert != "" {
+		log.Printf("🔒 HTTPS server started on %s\n", cfg.HTTP.Addr)
+		tlsCfg, err := loadTLS(cfg.HTTP.TLSCert, cfg.HTTP.TLSPass)
+		if err != nil {
+			log.Fatalf("TLS error: %v", err)
+		}
+		server := &http.Server{Addr: cfg.HTTP.Addr, Handler: r, TLSConfig: tlsCfg}
+		log.Fatal(server.ListenAndServeTLS("", ""))
+	} else {
+		log.Printf("🚀 HTTP server started on %s\n", cfg.HTTP.Addr)
+		log.Fatal(http.ListenAndServe(cfg.HTTP.Addr, r))
+	}
+}
+
+func sipWSProxy(target string) http.HandlerFunc {
+	upgrader := websocket.Upgrader{
+		CheckOrigin:  func(r *http.Request) bool { return true },
+		Subprotocols: []string{"sip"},
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		clientConn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println("SIP WS upgrade error:", err)
+			return
+		}
+		defer clientConn.Close()
+
+		header := http.Header{"Sec-WebSocket-Protocol": {"sip"}}
+		asteriskConn, _, err := websocket.DefaultDialer.Dial(target, header)
+		if err != nil {
+			log.Println("SIP WS dial Asterisk error:", err)
+			return
+		}
+		defer asteriskConn.Close()
+
+		errc := make(chan error, 2)
+		pipe := func(dst, src *websocket.Conn) {
+			for {
+				mt, msg, err := src.ReadMessage()
+				if err != nil {
+					errc <- err
+					return
+				}
+				if err = dst.WriteMessage(mt, msg); err != nil {
+					errc <- err
+					return
+				}
+			}
+		}
+		go pipe(asteriskConn, clientConn)
+		go pipe(clientConn, asteriskConn)
+		<-errc
+	}
+}
+
+func loadTLS(pfxPath, password string) (*tls.Config, error) {
+	pfxData, err := os.ReadFile(pfxPath)
+	if err != nil {
+		return nil, err
+	}
+	privateKey, cert, err := pkcs12.Decode(pfxData, password)
+	if err != nil {
+		return nil, err
+	}
+	tlsCert := tls.Certificate{
+		Certificate: [][]byte{cert.Raw},
+		PrivateKey:  privateKey,
+		Leaf:        cert,
+	}
+	return &tls.Config{Certificates: []tls.Certificate{tlsCert}}, nil
 }

@@ -42,3 +42,14 @@ tmp_dir = "tmp"
 [screen]
   clear_on_rebuild = false
   keep_scroll = true
+
+[env]
+  HTTP_ADDR = ":8080"
+  HTTP_PUBLIC_BASE = "http://localhost:8080"
+  DB_DSN = "postgres://postgres:postgres@172.20.40.2:5432/postgres?sslmode=disable"
+  JWT_SECRET = "CHANGE_ME_TO_RANDOM_STRING"
+  JWT_TTL_MINUTES = "60"
+  AMI_ADDR = "172.20.40.3:5038"
+  AMI_USER = "asterisk"
+  AMI_PASS = "asterisk"
+  ASTERISK_RECORDING_URL = "http://172.20.40.3:8090/recordings"
